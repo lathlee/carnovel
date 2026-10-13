@@ -12,9 +12,10 @@ import SwiftUI
 //
 //  上车后按顺序看：
 //    ① 类别必须是 Playback、模式必须是 MoviePlayback
-//    ② 输出路由：点过路由按钮之后，这里应该从「内置扬声器」变成车机名字
-//    ③ 播放器必须显示「播放中」—— 暂停状态下列表里什么都没有
-//    ④ 两个路由按钮并排，视频优先那个才应该出现车机屏
+//    ② 配置是否成功；如果不成功，看具体 NSError domain/code
+//    ③ 输出路由：点过路由按钮之后，这里应该从「内置扬声器」变成车机名字
+//    ④ 播放器必须显示「播放中」—— 暂停状态下列表里什么都没有
+//    ⑤ 两个路由按钮并排，视频优先那个才应该出现车机屏
 
 struct RouteDiagnosticsView: View {
 
@@ -22,7 +23,6 @@ struct RouteDiagnosticsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var snap = AudioSessionConfig.Snapshot()
-    @State private var sessionOK = false
 
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
@@ -32,7 +32,17 @@ struct RouteDiagnosticsView: View {
                 Section("① 音频会话（投屏的前提）") {
                     row("类别", snap.category, ok: snap.category.contains("Playback"))
                     row("模式", snap.mode, ok: snap.mode.contains("Movie"))
-                    row("配置结果", sessionOK ? "成功" : "失败", ok: sessionOK)
+                    row("配置结果", snap.lastSuccess ? "成功" : "失败", ok: snap.lastSuccess)
+                    if !snap.lastMessage.isEmpty && snap.lastMessage != "(无)" {
+                        Text(snap.lastMessage)
+                            .font(.caption)
+                            .foregroundStyle(snap.lastSuccess ? .secondary : .orange)
+                    }
+                    if !snap.lastDomainCode.isEmpty {
+                        Text("错误码: \(snap.lastDomainCode)")
+                            .font(.caption2)
+                            .foregroundStyle(.red)
+                    }
                     row("采样率", String(format: "%.0f Hz", snap.sampleRate))
                     row("声道数", "\(snap.channelCount)")
                     if snap.otherAudioPlaying {
@@ -87,10 +97,23 @@ struct RouteDiagnosticsView: View {
 
                 Section("⑤ 操作") {
                     Button("重新配置音频会话") {
-                        sessionOK = AudioSessionConfig.configure()
+                        _ = AudioSessionConfig.configure()
                         refresh()
                     }
                     Button("立即刷新状态") { refresh() }
+                }
+
+                Section("⑥ 还不行？") {
+                    Text("两步自检：")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("1. 把 iPhone 的蓝牙/Wi-Fi 暂时关掉，断开 CarPlay，再看「视频优先」选单里有没有车机。有 → 车机本身支持 AirPlay 视频，只是和 CarPlay 同时连会冲突。")
+                        Text("2. 下拉控制中心 → 长按音乐卡片 / 屏幕镜像，看列表里有没有车机。没有 → 车机不是 AirPlay 接收器，APTV 走的是别的通道（比如 DLNA），我们的 AirPlay 视频方案走不通。")
+                        Text("3. 如果选单里有车机但点它没画面 → 车机端没集成 AirPlay 视频能力，需要硬件方案（Apple TV / HDMI-in / AI Box）。")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("投屏诊断")
@@ -102,7 +125,7 @@ struct RouteDiagnosticsView: View {
             }
         }
         .onAppear {
-            sessionOK = AudioSessionConfig.configure()
+            _ = AudioSessionConfig.configure()
             refresh()
         }
         .onReceive(timer) { _ in refresh() }
