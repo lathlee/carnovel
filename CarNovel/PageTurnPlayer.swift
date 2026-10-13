@@ -18,14 +18,27 @@ import SwiftUI
 //  正解：让每一页成为一个独立媒体项。这样"下一曲"就天然等于"翻下一页"，
 //  完全是系统原生行为，不依赖任何 hack，也不受 iOS 版本变动影响。
 //
-//  ═══ 关键：这个 App 故意不申请 CarPlay entitlement ═══
+//  ═══ 这个 App 故意不申请 CarPlay entitlement ═══
 //
 //  正因为不是 CarPlay 应用，它不会出现在车机首页，车机屏上就不会有
-//  上一曲/下一曲/播放暂停那一排控件来遮挡文字 —— 屏幕里只有一个纯视频画面。
+//  上一曲/下一曲/播放暂停那一排控件来遮挡文字。
 //
-//  代价：没有 CarPlay 场景，只能在 iPhone 上开 App 开始播放，
-//  然后画面通过 AirPlay 视频镜像到车机。播放开始后手机可以息屏。
-//  这正是我们想要的取舍。
+//  ═══ v2 修复：为什么之前点投屏没反应 ═══
+//
+//  两个硬伤，都在这个文件里：
+//
+//  ① 从来没有配置过 AVAudioSession。
+//     没有音频会话 → AVPlayer 播不起来 → 系统认为"没有媒体在播"
+//     → AirPlay 路由选单里没有任何可投内容，只剩系统默认音频设备。
+//     → 见 AudioSessionConfig.swift
+//
+//  ② load() 之后从来没有 player.play()。
+//     只有"回退一页"的分支里有 play()，首次载入根本不播，
+//     画面永远是黑的，媒体会话也建立不起来。
+//
+//  现在：load() 里配置好会话并真正开始播放，默认单页循环 ——
+//  画面一直亮着（看起来是静止的一页），媒体会话也持续活着，
+//  这样车机才能一直收到画面。
 
 @MainActor
 final class PageTurnPlayer: ObservableObject {
@@ -33,13 +46,31 @@ final class PageTurnPlayer: ObservableObject {
     @Published private(set) var currentPage = 0
     @Published private(set) var pageCount = 0
 
+    /// 诊断面板显示用
+    @Published private(set) var statusText = "未装载"
+    /// 单页是否循环播放（保持媒体会话活跃）
+    @Published var loopsCurrentPage = true
+
     private let player = AVQueuePlayer()
+    private var looper: AVPlayerLooper?
     private var pages: [URL] = []
     private var bookID = ""
     private var chapterIndex = 0
     private var endObserver: NSObjectProtocol?
 
     var avPlayer: AVPlayer { player }
+
+    /// 播放器状态的可读描述（诊断面板用）
+    var playerStateText: String {
+        switch player.timeControlStatus {
+        case .playing: return "播放中"
+        case .waitingToPlayAtSpecifiedRate: return "缓冲中"
+        case .paused: return "已暂停"
+        @unknown default: return "未知"
+        }
+    }
+
+    var isPlaying: Bool { player.timeControlStatus == .playing }
 
     // MARK: - 装载
 
@@ -50,12 +81,17 @@ final class PageTurnPlayer: ObservableObject {
         self.bookID = bookID
         self.chapterIndex = chapterIndex
 
+        // ★ ① 先配置音频会话。必须在起播之前 ——
+        //    没有会话，AVPlayer 播不起来，投屏选单也是空的。
+        AudioSessionConfig.activateForCasting()
+
         // 让画面能外放到 AirPlay 设备 —— 车机走的就是这条路
         player.allowsExternalPlayback = true
 
-        // ★ 播完停在最后一帧，不自动切下一页。
-        //   翻不翻页完全由方向盘决定，这就是"不用连播"。
-        player.actionAtItemEnd = .pause
+        // ★ ② 不再用 actionAtItemEnd = .pause。
+        //    之前"播完就停住"看似聪明，实际上会让媒体会话被系统回收，
+        //    车机画面随之中断。改成单页循环：画面静止但会话常活。
+        player.actionAtItemEnd = .advance
 
         removeObservers()
         buildItems(from: max(0, min(startAt, urls.count - 1)))
@@ -63,72 +99,89 @@ final class PageTurnPlayer: ObservableObject {
         observeItemEnd()
         registerRemoteCommands()
         updateNowPlaying()
+
+        // ★ ③ 真正开始播放。这一步之前根本不存在。
+        player.play()
+        statusText = "已装载 \(pageCount) 页，播放中"
     }
 
     private func buildItems(from index: Int) {
+        // 顺序很重要：必须先释放 looper，再清队列。
+        // 反过来的话 AVPlayerLooper 还持着已经被移除的媒体项，会出乱子。
+        looper = nil
         player.removeAllItems()
-        for url in pages[index...] {
-            // allowsExternalPlayback 是 AVPlayer 的属性，不是 AVPlayerItem 的。
-            // 外放开关在 load() 里对 player 设一次即可，这里不要重复设。
-            player.insert(AVPlayerItem(url: url), after: nil)
+
+        guard pages.indices.contains(index) else { return }
+
+        if loopsCurrentPage {
+            // 单个媒体项 + looper = 无限循环这一页。
+            // 画面看起来是静止的一张纸，但会话一直活着。
+            // AVPlayerLooper 要求 actionAtItemEnd 是 .advance。
+            player.actionAtItemEnd = .advance
+            let item = AVPlayerItem(url: pages[index])
+            looper = AVPlayerLooper(player: player, templateItem: item)
+        } else {
+            // 对照模式：整章排队，每页播完停住
+            player.actionAtItemEnd = .pause
+            for url in pages[index...] {
+                player.insert(AVPlayerItem(url: url), after: nil)
+            }
         }
         currentPage = index
     }
 
+    /// 切换"单页循环"并重建队列
+    func setLooping(_ on: Bool) {
+        loopsCurrentPage = on
+        let wasPlaying = isPlaying
+        buildItems(from: currentPage)
+        if wasPlaying { player.play() }
+    }
+
     // MARK: - 翻页
 
-    /// 下一页：让 AVQueuePlayer 前进一个媒体项，并立刻暂停在它的最后一帧。
-    /// 之所以 advance + pause 而不是 play，是因为我们只想要"静止的一页"。
     func nextPage() {
         guard currentPage + 1 < pageCount else { return }
-        player.advanceToNextItem()
         currentPage += 1
-
-        if let item = player.currentItem {
-            // 跳到这一页的末尾再停住 —— 单页视频只有 1 秒，
-            // 直接停在末帧能确保画面完整显示，也不会触发自动播放。
-            let end = item.duration
-            if end.isNumeric {
-                player.seek(to: end, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-                    self?.player.pause()
-                }
-            } else {
-                player.pause()
-            }
-        }
-        updateNowPlaying()
-        saveProgress()
+        rebuildAndPlay()
     }
 
     func previousPage() {
         guard currentPage > 0 else { return }
-        let target = currentPage - 1
-        // 队列只能往后推进，回退要重建队列
-        buildItems(from: target)
-        showCurrentFrame()
+        currentPage -= 1
+        rebuildAndPlay()
+    }
+
+    /// 切换页面：重建队列到目标页并继续播放
+    private func rebuildAndPlay() {
+        buildItems(from: currentPage)
+        player.play()
         updateNowPlaying()
         saveProgress()
     }
 
-    /// 把当前页的画面摆出来（跳到末帧后暂停）
-    private func showCurrentFrame() {
-        guard let item = player.currentItem else { return }
-        player.play()   // 先播放一下，让 AVPlayer 把这一帧解出来
-        let end = item.duration
-        if end.isNumeric {
-            player.seek(to: end, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-                self?.player.pause()
-            }
-        }
-    }
-
-    /// 在 iPhone 上打开某一页（用于从书架续读）
+    /// 在 iPhone 上打开某一页（用于从书架续读 / 从章节列表跳转）
     func jump(to page: Int) {
         guard pages.indices.contains(page) else { return }
-        buildItems(from: page)
-        showCurrentFrame()
+        currentPage = page
+        rebuildAndPlay()
+    }
+
+    /// 从另一个章节重新载入（章节列表直接跳章用）
+    func reload(pages urls: [URL], chapterIndex: Int, startAt: Int = 0) {
+        self.pages = urls
+        self.pageCount = urls.count
+        self.chapterIndex = chapterIndex
+        currentPage = 0
+        buildItems(from: max(0, min(startAt, urls.count - 1)))
+        player.play()
         updateNowPlaying()
-        saveProgress()
+        statusText = "已切到第 \(chapterIndex + 1) 章"
+    }
+
+    func stop() {
+        player.pause()
+        statusText = "已停止"
     }
 
     // MARK: - 进度
@@ -142,13 +195,13 @@ final class PageTurnPlayer: ObservableObject {
 
     // MARK: - Now Playing 元数据
 
-    /// 车机屏上看不到 UI，但锁屏/小组件上有个标题会比较友好。
-    /// 这里只填最少的字段，不设 artwork —— artwork 可能触发某些车机的画面叠加。
+    /// 车机屏上看不到 UI，但锁屏和 CarPlay 的「正在播放」上有个标题会比较友好。
+    /// 不设 artwork —— artwork 可能触发某些车机的画面叠加。
     private func updateNowPlaying() {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [
             MPMediaItemPropertyTitle: "第 \(chapterIndex + 1) 章 · 第 \(currentPage + 1)/\(pageCount) 页",
             MPMediaItemPropertyArtist: "",
-            MPNowPlayingInfoPropertyPlaybackRate: 0.0,   // 声明"未在播放"，避免误显进度条
+            MPNowPlayingInfoPropertyPlaybackRate: 1.0,   // 声明"正在播放"，车机才会维持会话
             MPNowPlayingInfoPropertyIsLiveStream: true,  // 让系统不渲染可拖动进度条
         ]
     }
@@ -193,11 +246,30 @@ final class PageTurnPlayer: ObservableObject {
             return .success
         }
 
-        // ★ 显式关掉播放/暂停和进度拖动。
-        //   我们要的是"静止的一页纸"，被误触播放会打乱翻页状态。
-        center.playCommand.isEnabled = false
-        center.pauseCommand.isEnabled = false
-        center.togglePlayPauseCommand.isEnabled = false
+        // 播放/暂停保持可用 —— 用户可能想主动掐掉画面。
+        // 之前把 play/pause 全关了，结果"手贱按了暂停"和"根本没在播"
+        // 在车机屏上看起来一模一样，反而更难排查。这里放开。
+        center.playCommand.isEnabled = true
+        center.playCommand.addTarget { [weak self] _ in
+            guard let self else { return .commandFailed }
+            Task { @MainActor in self.player.play() }
+            return .success
+        }
+        center.pauseCommand.isEnabled = true
+        center.pauseCommand.addTarget { [weak self] _ in
+            guard let self else { return .commandFailed }
+            Task { @MainActor in self.player.pause() }
+            return .success
+        }
+        center.togglePlayPauseCommand.isEnabled = true
+        center.togglePlayPauseCommand.addTarget { [weak self] _ in
+            guard let self else { return .commandFailed }
+            Task { @MainActor in
+                self.isPlaying ? self.player.pause() : self.player.play()
+            }
+            return .success
+        }
+        // 进度拖动仍然关掉 —— 单页视频拖时间轴没有意义
         center.changePlaybackPositionCommand.isEnabled = false
     }
 
@@ -209,9 +281,10 @@ final class PageTurnPlayer: ObservableObject {
         ) { [weak self] note in
             Task { @MainActor in
                 guard let self, let item = note.object as? AVPlayerItem else { return }
-                // 播完就停住 —— 不自动往下播
-                if item === self.player.currentItem {
+                // 非循环模式下：播完停住，不自动往下播（翻页由方向盘决定）
+                if !self.loopsCurrentPage, item === self.player.currentItem {
                     self.player.pause()
+                    self.statusText = "本页播完，等方向盘翻页"
                 }
             }
         }

@@ -27,6 +27,7 @@ struct ReadView: View {
     @State private var pageURLs: [URL] = []
     @State private var phase: Phase = .idle
     @State private var errorMessage: String?
+    @State private var showingDiagnostics = false
 
     enum Phase: Equatable {
         case idle
@@ -65,6 +66,19 @@ struct ReadView: View {
         .padding()
         .navigationTitle(chapter?.title ?? "阅读")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingDiagnostics = true
+                } label: {
+                    Image(systemName: "wave.3.right.circle")
+                }
+                .accessibilityLabel("投屏诊断")
+            }
+        }
+        .sheet(isPresented: $showingDiagnostics) {
+            RouteDiagnosticsView(player: player)
+        }
         .task { await prepare() }
         .onDisappear { persistProgress() }
         .alert("出错了", isPresented: .constant(errorMessage != nil)) {
@@ -131,6 +145,10 @@ struct ReadView: View {
                     .font(.footnote)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
+
+                Text(player.statusText)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
             .padding(.vertical, 16)
             .frame(maxWidth: .infinity)

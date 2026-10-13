@@ -1,4 +1,4 @@
-import SwiftData
+import AVFoundation
 import SwiftUI
 
 //  CarNovel —— App 入口
@@ -13,6 +13,11 @@ struct CarNovelApp: App {
         // ★★ 必须调用，否则方向盘的「上一曲 / 下一曲」事件收不到。
         //    这是这类项目最容易漏的一步。
         UIApplication.shared.beginReceivingRemoteControlEvents()
+
+        // ★★ 同样必须：没有音频会话，AVPlayer 起不来，
+        //     AirPlay 路由选单里也没有任何可投内容。
+        //     见 AudioSessionConfig.swift 顶部说明。
+        AudioSessionConfig.configure()
     }
 
     var body: some Scene {
