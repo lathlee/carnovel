@@ -1,6 +1,7 @@
 import AVKit
 import MediaPlayer
 import SwiftUI
+import UIKit
 
 // ═══════════════════════════════════════════════════════════════════
 //  翻页播放器 —— 方向盘「上一曲 / 下一曲」翻页
@@ -55,8 +56,12 @@ final class PageTurnPlayer: ObservableObject {
     private var looper: AVPlayerLooper?
     private var pages: [URL] = []
     private var bookID = ""
+    private var bookTitle = ""
     private var chapterIndex = 0
     private var endObserver: NSObjectProtocol?
+
+    /// 「正在播放」封面图缓存（只留最近几张）
+    private var artworkCache: [Int: UIImage] = [:]
 
     var avPlayer: AVPlayer { player }
 
@@ -72,14 +77,29 @@ final class PageTurnPlayer: ObservableObject {
 
     var isPlaying: Bool { player.timeControlStatus == .playing }
 
+    /// 诊断用：当前页的封面图（CarPlay「正在播放」用）到底有没有生成
+    var artworkStatusText: String {
+        guard pages.indices.contains(currentPage) else { return "无页面" }
+        let url = PageStore.artworkURL(besideVideo: pages[currentPage])
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = attrs[.size] as? Int else {
+            return "缺失 —— 封面不会显示"
+        }
+        return "存在（\(size / 1024) KB）"
+    }
+
     // MARK: - 装载
 
     /// - Parameter urls: 按页序排列的单页视频文件（ch01_p001.mp4 … ch01_p018.mp4）
-    func load(pages urls: [URL], bookID: String, chapterIndex: Int, startAt: Int = 0) {
+    /// - Parameter title: 书名，会显示在 CarPlay「正在播放」的艺术家一栏
+    func load(pages urls: [URL], bookID: String, bookTitle title: String = "",
+              chapterIndex: Int, startAt: Int = 0) {
         self.pages = urls
         self.pageCount = urls.count
         self.bookID = bookID
+        self.bookTitle = title
         self.chapterIndex = chapterIndex
+        artworkCache.removeAll()
 
         // ★ ① 先配置音频会话。必须在起播之前 ——
         //    没有会话，AVPlayer 播不起来，投屏选单也是空的。
@@ -195,15 +215,50 @@ final class PageTurnPlayer: ObservableObject {
 
     // MARK: - Now Playing 元数据
 
-    /// 车机屏上看不到 UI，但锁屏和 CarPlay 的「正在播放」上有个标题会比较友好。
-    /// 不设 artwork —— artwork 可能触发某些车机的画面叠加。
+    /// ★ 这是目前唯一**不需要 CarPlay entitlement** 就能在车机上显示内容的通道。
+    ///
+    ///   CarPlay 的「正在播放」是协议里的基础模板，任何车机（含 DiPlay 这类
+    ///   开源接收端）都会实现它。它读的就是 MPNowPlayingInfoCenter：
+    ///     · 标题 / 艺术家 / 播放状态 —— 纯文字
+    ///     · 封面 —— MPMediaItemPropertyArtwork，可以放任意图片
+    ///
+    ///   所以我们把**当前页的渲染图**当作封面推过去，车机上就能看到这一页。
+    ///
+    ///   能走通的关键前提（现在都具备了）：
+    ///     ① 音频会话配置成功  → AudioSessionConfig
+    ///     ② 播放器确实在播    → load() 里的 player.play()
+    ///     ③ 封面图存在        → PageStore 与 mp4 同目录写出的 p%03d.jpg
     private func updateNowPlaying() {
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+        var info: [String: Any] = [
             MPMediaItemPropertyTitle: "第 \(chapterIndex + 1) 章 · 第 \(currentPage + 1)/\(pageCount) 页",
-            MPMediaItemPropertyArtist: "",
+            MPMediaItemPropertyArtist: bookTitle.isEmpty ? "CarNovel" : bookTitle,
+            MPMediaItemPropertyAlbumTitle: "CarNovel",
             MPNowPlayingInfoPropertyPlaybackRate: 1.0,   // 声明"正在播放"，车机才会维持会话
             MPNowPlayingInfoPropertyIsLiveStream: true,  // 让系统不渲染可拖动进度条
         ]
+
+        if let image = artworkImage(for: currentPage) {
+            // boundsSize 给个大方值；系统会按车机实际的封面区域来要尺寸，
+            // 回调里直接把整页图交给它，缩放由系统做。
+            info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in
+                image
+            }
+        }
+
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    /// 取某一页的封面图（懒加载 + 只缓存最近几张，避免内存膨胀）
+    private func artworkImage(for index: Int) -> UIImage? {
+        if let cached = artworkCache[index] { return cached }
+
+        guard pages.indices.contains(index) else { return nil }
+        let url = PageStore.artworkURL(besideVideo: pages[index])
+        guard let image = UIImage(contentsOfFile: url.path) else { return nil }
+
+        if artworkCache.count >= 6 { artworkCache.removeAll() }
+        artworkCache[index] = image
+        return image
     }
 
     // MARK: - 方向盘 / 锁屏遥控

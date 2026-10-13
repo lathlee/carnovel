@@ -64,6 +64,8 @@ struct RouteDiagnosticsView: View {
                 Section("③ 播放器") {
                     row("状态", player.playerStateText, ok: player.isPlaying)
                     row("当前页", "\(player.currentPage + 1) / \(player.pageCount)")
+                    row("封面图", player.artworkStatusText,
+                        ok: !player.artworkStatusText.contains("缺失"))
                     Toggle("单页循环（保持会话活跃）", isOn: Binding(
                         get: { player.loopsCurrentPage },
                         set: { player.setLooping($0) }
@@ -103,17 +105,26 @@ struct RouteDiagnosticsView: View {
                     Button("立即刷新状态") { refresh() }
                 }
 
-                Section("⑥ 还不行？") {
-                    Text("两步自检：")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("1. 把 iPhone 的蓝牙/Wi-Fi 暂时关掉，断开 CarPlay，再看「视频优先」选单里有没有车机。有 → 车机本身支持 AirPlay 视频，只是和 CarPlay 同时连会冲突。")
-                        Text("2. 下拉控制中心 → 长按音乐卡片 / 屏幕镜像，看列表里有没有车机。没有 → 车机不是 AirPlay 接收器，APTV 走的是别的通道（比如 DLNA），我们的 AirPlay 视频方案走不通。")
-                        Text("3. 如果选单里有车机但点它没画面 → 车机端没集成 AirPlay 视频能力，需要硬件方案（Apple TV / HDMI-in / AI Box）。")
+                Section("⑥ 车机上该看哪里") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("★ 首选：「正在播放 / Now Playing」")
+                            .font(.footnote.bold())
+                        Text("这是 CarPlay 协议里的基础模板，任何车机都会实现，且**不需要 CarPlay entitlement**。去车机的 CarPlay 里找「正在播放」，应该能看到标题「第 X 章 · 第 Y/Z 页」和当前页的封面图。看到就说明这条路通了。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Text("为什么不做 CarPlay 应用图标")
+                            .font(.footnote.bold())
+                        Text("APTV /「车联投屏」能出现在车机首页，是因为它们持有 Apple 正式审批的 CarPlay entitlement（付费开发者账号 + 逐个审批）。免费 Apple ID 侧载拿不到任何 entitlement，这条路封死。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Text("AirPlay 视频路由（已确认走不通）")
+                            .font(.caption.bold())
+                        Text("车机是 DiPlay —— 用从 Carlinkit 固件提取的实验性 MFi 身份冒充 CarPlay 车机。它只做 CarPlay 接收，不广播 AirPlay 视频/镜像接收能力，所以屏幕镜像里没有车机。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("投屏诊断")

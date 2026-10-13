@@ -15,6 +15,7 @@
 import AVFoundation
 import CoreGraphics
 import Foundation
+import UIKit
 
 actor PageStore {
 
@@ -55,10 +56,30 @@ actor PageStore {
         for page in rendered {
             let url = dir.appendingPathComponent(String(format: "p%03d.mp4", page.index + 1))
             try await writeSinglePageVideo(page.image, to: url, seconds: seconds)
+
+            // ★ 同一页再存一份 JPEG。
+            //   用途：CarPlay 的「正在播放」界面用 MPMediaItemArtwork 显示封面，
+            //   这条路不需要 CarPlay entitlement —— 是唯一能在车机上显示内容的纯软件通道。
+            //   见 PageTurnPlayer.updateNowPlaying()
+            let jpg = dir.appendingPathComponent(String(format: "p%03d.jpg", page.index + 1))
+            writePageImage(page.image, to: jpg)
+
             urls.append(url)
             progress?(urls.count, rendered.count)
         }
         return urls
+    }
+
+    /// 某一页的封面图路径（供 PageTurnPlayer 用）
+    nonisolated static func artworkURL(besideVideo videoURL: URL) -> URL {
+        videoURL.deletingPathExtension().appendingPathExtension("jpg")
+    }
+
+    /// 把页面位图写成 JPEG（给「正在播放」当封面用）
+    private func writePageImage(_ image: CGImage, to url: URL) {
+        let ui = UIImage(cgImage: image)
+        guard let data = ui.jpegData(compressionQuality: 0.9) else { return }
+        try? data.write(to: url, options: .atomic)
     }
 
     /// 暴露章节目录路径（调试 / 预生成用）
@@ -113,7 +134,14 @@ actor PageStore {
             .filter { $0.pathExtension.lowercased() == "mp4" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
-        return mp4s.isEmpty ? nil : mp4s
+        guard !mp4s.isEmpty else { return nil }
+
+        // 旧版缓存只有 mp4，没有 jpg 封面 —— 那样「正在播放」里没有图。
+        // 数量对不上就当作没缓存，重新生成一遍。
+        let jpgCount = files.filter { $0.pathExtension.lowercased() == "jpg" }.count
+        guard jpgCount >= mp4s.count else { return nil }
+
+        return mp4s
     }
 
     /// 把一张位图写成一个 1 秒的 HEVC mp4。

@@ -211,6 +211,7 @@ struct ReadView: View {
             let resume = (book.currentChapter == chapterIndex) ? book.currentPage : 0
             player.load(pages: urls,
                         bookID: book.remoteID,
+                        bookTitle: book.title,
                         chapterIndex: chapterIndex,
                         startAt: min(resume, urls.count - 1))
 
