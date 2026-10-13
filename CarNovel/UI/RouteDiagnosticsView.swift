@@ -36,19 +36,19 @@ struct RouteDiagnosticsView: View {
                     if !snap.lastMessage.isEmpty && snap.lastMessage != "(无)" {
                         Text(snap.lastMessage)
                             .font(.caption)
-                            .foregroundStyle(snap.lastSuccess ? .secondary : .orange)
+                            .foregroundColor(snap.lastSuccess ? .secondary : .orange)
                     }
                     if !snap.lastDomainCode.isEmpty {
                         Text("错误码: \(snap.lastDomainCode)")
                             .font(.caption2)
-                            .foregroundStyle(.red)
+                            .foregroundColor(.red)
                     }
                     row("采样率", String(format: "%.0f Hz", snap.sampleRate))
                     row("声道数", "\(snap.channelCount)")
                     if snap.otherAudioPlaying {
                         Text("有其它 App 正在播音 —— 会抢走音频会话。先关掉它。")
                             .font(.caption)
-                            .foregroundStyle(.orange)
+                            .foregroundColor(.orange)
                     }
                 }
 
