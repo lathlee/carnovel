@@ -1,0 +1,69 @@
+# 在 GitHub 的免费 macOS runner 上编译出**未签名**的 .ipa
+#
+# 为什么这么做：本机是 Windows，而编译器 Xcode 只有 macOS 有。
+#   GitHub Actions 提供免费的 macOS runner，于是「Windows 写码 → 云端编译」成立。
+#
+# 注意：本仓库的根目录应该是 carplay-novel/ 这一层。
+#   如果你把代码放在仓库子目录里，给每个 step 加 working-directory。
+#
+# 关于 Xcode 版本：2026 年 4 月起，App Store Connect 相关工具链要求 Xcode 26+。
+#   本项目没有用到 iOS 27 新 API，部署目标 17.0，用 Xcode 26 编译即可。
+#   如果 macos-26 镜像不可用，改成 macos-15 再试。
+
+name: Build unsigned IPA
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-26
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 环境信息
+        run: |
+          xcodebuild -version
+          sw_vers
+
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+
+      - name: 生成 Xcode 工程
+        run: xcodegen generate
+
+      - name: 编译（不签名）
+        run: |
+          xcodebuild archive \
+            -project CarNovel.xcodeproj \
+            -scheme CarNovel \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/CarNovel.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            | xcbeautify || true
+
+      - name: 打包成 .ipa
+        run: |
+          set -e
+          APP="$RUNNER_TEMP/CarNovel.xcarchive/Products/Applications/CarNovel.app"
+          test -d "$APP" || { echo "没找到 .app，编译大概失败了"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP"
+          zip -qry CarNovel.ipa Payload
+          ls -lh CarNovel.ipa
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: CarNovel-unsigned-ipa
+          path: ${{ runner.temp }}/CarNovel.ipa
+          if-no-files-found: error
+          retention-days: 30
