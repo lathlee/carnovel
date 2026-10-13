@@ -4,7 +4,10 @@ import UIKit
 // 车机屏观看距离约 60-80cm，字号必须比手机大得多。
 // 1920×1080 画布上 64pt 的观感 ≈ 手机 22pt。别按手机习惯给 17pt，上车完全看不清。
 
-struct PageStyle {
+/// 排版样式。
+/// 标 Sendable 是因为它要作为参数传进 PageStore（actor）——
+/// Swift 6 的严格并发检查会拒绝跨隔离域传非 Sendable 值。
+struct PageStyle: Sendable {
     var canvas = CGSize(width: 1920, height: 1080)
     var fontName = "PingFangSC-Regular"
     var fontSize: CGFloat = 64
@@ -19,7 +22,8 @@ struct PageStyle {
     static let car = PageStyle()
 }
 
-struct NovelPage {
+/// CoreText 分页结果。image 是 CGImage（线程安全），text 是纯值 —— 可安全跨 actor。
+struct NovelPage: Sendable {
     let index: Int
     let image: CGImage
     let text: String
@@ -31,7 +35,10 @@ enum Paginator {
     /// 纯 CoreText 实现，不走 UIKit 绘制 —— 因此**不需要翻转坐标系**。
     /// （常见坑：网上大部分示例为了配 NSAttributedString.draw 做了 translate+scale 翻转，
     ///  而 CTFrameDraw / CTLineDraw 本身就是左下角原点，翻了反而倒着画。）
-    static func paginate(_ text: String, style: PageStyle = .car) -> [NovelPage] {
+    ///
+    /// 标 nonisolated：它是无状态的纯函数，被 actor（PageStore）调用时
+    /// 不该要求切换到主线程。
+    nonisolated static func paginate(_ text: String, style: PageStyle = .car) -> [NovelPage] {
         let font = CTFontCreateWithName(style.fontName as CFString, style.fontSize, nil)
 
         let para = NSMutableParagraphStyle()

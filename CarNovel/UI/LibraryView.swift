@@ -44,7 +44,7 @@ struct LibraryView: View {
             }
             .fileImporter(
                 isPresented: $importing,
-                allowedContentTypes: [.plainText, .text, .epub, UTType(filenameExtension: "txt") ?? .plainText],
+                allowedContentTypes: importTypes,
                 allowsMultipleSelection: false
             ) { result in
                 handleImport(result)
@@ -68,6 +68,16 @@ struct LibraryView: View {
     }
 
     // MARK: - 列表
+
+    /// 允许导入的类型。
+    /// 「epub」和「txt」用 UTType(filenameExtension:) 现造 ——
+    /// UTType 里没有 .epub 这个静态成员，写 .epub 会直接编译不过。
+    private var importTypes: [UTType] {
+        var types: [UTType] = [.plainText, .text]
+        if let epub = UTType(filenameExtension: "epub") { types.append(epub) }
+        if let txt = UTType(filenameExtension: "txt") { types.append(txt) }
+        return types
+    }
 
     private var list: some View {
         List {
@@ -168,9 +178,13 @@ struct LibraryView: View {
 
     /// 把导入结果写进书架
     private func store(_ result: LocalBookSource.ImportResult) throws {
-        // 已经导过同一本就覆盖，避免重复
+        // 已经导过同一本就覆盖，避免重复。
+        // 注意：必须先把值取到局部常量再进 #Predicate —— 直接写
+        // `$0.bookID == result.bookID` 会被宏展开成对 ImportResult 的
+        // keyPath，SwiftData 无法把它当值处理，编译直接报错。
+        let bookID = result.bookID
         let descriptor = FetchDescriptor<ShelfBook>(
-            predicate: #Predicate { $0.bookID == result.bookID }
+            predicate: #Predicate { $0.bookID == bookID }
         )
         if let existing = try? context.fetch(descriptor).first {
             existing.title = result.title

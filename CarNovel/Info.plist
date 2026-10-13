@@ -47,10 +47,12 @@
     <key>MinimumOSVersion</key>
     <string>17.0</string>
 
-    <key>UIDeviceFamily</key>
-    <array>
-        <integer>1</integer>
-    </array>
+    <!--
+        UIDeviceFamily 不在这里声明 —— 由 build setting TARGETED_DEVICE_FAMILY 控制
+        （project.yml 里设成 "1"，即仅 iPhone）。
+        两边都写的话 Xcode 会警告 "User supplied UIDeviceFamily key in the Info.plist
+        will be overwritten"，因为它无条件用 build setting 覆盖这里。
+    -->
 
     <key>UILaunchScreen</key>
     <dict/>

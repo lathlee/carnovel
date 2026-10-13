@@ -68,9 +68,9 @@ final class PageTurnPlayer: ObservableObject {
     private func buildItems(from index: Int) {
         player.removeAllItems()
         for url in pages[index...] {
-            let item = AVPlayerItem(url: url)
-            item.allowsExternalPlayback = true
-            player.insert(item, after: nil)
+            // allowsExternalPlayback 是 AVPlayer 的属性，不是 AVPlayerItem 的。
+            // 外放开关在 load() 里对 player 设一次即可，这里不要重复设。
+            player.insert(AVPlayerItem(url: url), after: nil)
         }
         currentPage = index
     }

@@ -166,8 +166,11 @@ struct ReadView: View {
             let dir = await store.folderURL(bookID: book.remoteID, chapter: chapterIndex)
 
             phase = .rendering(done: 0, total: 0)
+            // progress 闭包是 @Sendable，可能在任意线程被调。
+            // 所以这里不直接碰 @State（会触发 Swift 6 的并发检查报错），
+            // 而是用 Task { @MainActor } 把值搬回主线程。
             let urls = try await store.pages(
-                bookID: book.remoteID,
+                for: book.remoteID,
                 chapter: chapterIndex,
                 text: chapterText,
                 style: .car,

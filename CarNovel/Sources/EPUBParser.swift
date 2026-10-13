@@ -313,17 +313,20 @@ enum EPUBParser {
         }
 
         // 数字实体 &#12345;
+        // 注意：这里必须从后往前替换 —— 每替换一次字符串长度就变，
+        // 从前往后会让后面所有 match.range 失效（错位甚至越界崩溃）。
         if let regex = try? NSRegularExpression(pattern: "&#(\\d+);") {
-            let ns = text as NSString
-            let matches = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
+            var mutable = text
+            let matches = regex.matches(in: mutable,
+                                        range: NSRange(mutable.startIndex..., in: mutable))
             for match in matches.reversed() where match.numberOfRanges >= 2 {
-                if let code = UInt32(ns.substring(with: match.range(at: 1))),
-                   let scalar = UnicodeScalar(code) {
-                    text = (text as NSString).replacingCharacters(
-                        in: match.range, with: String(Character(scalar))
-                    )
-                }
+                guard let range = Range(match.range, in: mutable),
+                      let codeRange = Range(match.range(at: 1), in: mutable),
+                      let code = UInt32(mutable[codeRange]),
+                      let scalar = UnicodeScalar(code) else { continue }
+                mutable.replaceSubrange(range, with: String(Character(scalar)))
             }
+            text = mutable
         }
 
         // 压空白：连续空行合并，行首尾去空格
@@ -372,22 +375,30 @@ enum EPUBParser {
 }
 
 // MARK: - 小端读取
+//
+// 注意：这里刻意不用 withUnsafeBytes 的闭包写法。实测那种写法在 Swift 6 下有两类问题：
+//   1. `raw[offset]` 在两个 subscript 重载之间歧义
+//      （UnsafePointer.subscript 与 UnsafeRawBufferPointer.subscript）
+//   2. 四路位运算串在一个表达式里会让类型检查器超时
+// 所以改成「先逐个取字节，再拼」，语义相同但没有歧义、也不会触发超时。
 
 private extension Data {
     func uint16(at offset: Int) -> UInt16 {
-        guard offset + 2 <= count else { return 0 }
-        return withUnsafeBytes { raw in
-            UInt16(raw[offset]) | (UInt16(raw[offset + 1]) << 8)
-        }
+        guard offset >= 0, offset + 2 <= count else { return 0 }
+        let b0 = UInt16(self[index(startIndex, offsetBy: offset)])
+        let b1 = UInt16(self[index(startIndex, offsetBy: offset + 1)])
+        return b0 | (b1 << 8)
     }
 
     func uint32(at offset: Int) -> UInt32 {
-        guard offset + 4 <= count else { return 0 }
-        return withUnsafeBytes { raw in
-            UInt32(raw[offset])
-                | (UInt32(raw[offset + 1]) << 8)
-                | (UInt32(raw[offset + 2]) << 16)
-                | (UInt32(raw[offset + 3]) << 24)
-        }
+        guard offset >= 0, offset + 4 <= count else { return 0 }
+        let b0 = UInt32(self[index(startIndex, offsetBy: offset)])
+        let b1 = UInt32(self[index(startIndex, offsetBy: offset + 1)])
+        let b2 = UInt32(self[index(startIndex, offsetBy: offset + 2)])
+        let b3 = UInt32(self[index(startIndex, offsetBy: offset + 3)])
+        // 分两步拼，避免单表达式过长导致类型检查超时
+        let low = b0 | (b1 << 8)
+        let high = (b2 << 16) | (b3 << 24)
+        return low | high
     }
 }

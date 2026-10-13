@@ -25,7 +25,11 @@ struct SearchView: View {
                     }
                 }
 
-                ForEach(results, id: \.source.id) { group in
+                // 注意：不能写 ForEach(results, id: \.source.id) ——
+                // Swift 的 key path 不支持指向元组元素（\.source 会编译失败），
+                // 所以用下标遍历。
+                ForEach(results.indices, id: \.self) { index in
+                    let group = results[index]
                     if let error = group.error {
                         Section(group.source.name) {
                             Label(error, systemImage: "exclamationmark.triangle")

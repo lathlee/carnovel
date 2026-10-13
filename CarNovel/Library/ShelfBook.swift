@@ -26,7 +26,13 @@ final class ShelfBook {
     var localPath: String?
 
     var addedAt: Date
-    var lastReadAt: Date?
+
+    /// 最近一次阅读时间。
+    /// 刻意**不用可选类型** —— 书架的 @Query 按它倒序排，
+    /// 而 SwiftData 的 @Query(sort:) 要求 keyPath 的值类型满足 Comparable，
+    /// `Date?` 不满足，写成可选会直接编译不过。
+    /// 语义上"从没读过"就等于"加入时间"，所以用 addedAt 兜底没有信息损失。
+    var lastReadAt: Date
 
     /// 当前读到第几章（章节目录的索引）
     var currentChapter: Int
@@ -69,6 +75,7 @@ final class ShelfBook {
         self.remoteID = remoteID
         self.localPath = localPath
         self.addedAt = Date()
+        self.lastReadAt = Date()
         self.currentChapter = 0
         self.currentPage = 0
         self.isFinished = false
