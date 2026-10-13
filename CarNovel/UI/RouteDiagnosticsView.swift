@@ -64,8 +64,6 @@ struct RouteDiagnosticsView: View {
                 Section("③ 播放器") {
                     row("状态", player.playerStateText, ok: player.isPlaying)
                     row("当前页", "\(player.currentPage + 1) / \(player.pageCount)")
-                    row("封面图", player.artworkStatusText,
-                        ok: !player.artworkStatusText.contains("缺失"))
                     Toggle("单页循环（保持会话活跃）", isOn: Binding(
                         get: { player.loopsCurrentPage },
                         set: { player.setLooping($0) }
@@ -107,9 +105,15 @@ struct RouteDiagnosticsView: View {
 
                 Section("⑥ 车机上该看哪里") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("★ 首选：「正在播放 / Now Playing」")
+                        Text("★ 首选：CarPlay 浏览器打开网页")
                             .font(.footnote.bold())
-                        Text("这是 CarPlay 协议里的基础模板，任何车机都会实现，且**不需要 CarPlay entitlement**。去车机的 CarPlay 里找「正在播放」，应该能看到标题「第 X 章 · 第 Y/Z 页」和当前页的封面图。看到就说明这条路通了。")
+                        Text("在阅读页点「CarPlay 浏览器打开」拿到 127.0.0.1 地址，粘到车机 APTV / 车联投屏 的浏览器里即可全屏阅读。这条路不需要 CarPlay entitlement、不需要 AirPlay 视频能力、也不需要屏幕镜像。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Text("备选：「正在播放 / Now Playing」")
+                            .font(.footnote.bold())
+                        Text("CarPlay 协议的基础模板，任何车机都实现，不需要 entitlement。去车机 CarPlay 里找「正在播放」，能看到标题「第 X 章 · 第 Y/Z 页」。但封面区域只有约 1/3 屏且无法放大，只能当进度提示，看不了正文。")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
