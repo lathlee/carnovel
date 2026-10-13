@@ -24,6 +24,13 @@ struct CarNovelApp: App {
         WindowGroup {
             LibraryView()
         }
-        .modelContainer(for: [ShelfBook.self, ReadingRecord.self])
+        .modelContainer(for: [ShelfBook.self, ReadingRecord.self]) { result in
+            // 等 SwiftData 容器就绪再启动 HTTP 服务器，
+            // 这样书架请求进来时 mainContext 已经可用。
+            if let container = try? result.get() {
+                BookHTTPServer.shared.configure(modelContainer: container)
+                BookHTTPServer.shared.start()
+            }
+        }
     }
 }

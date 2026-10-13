@@ -28,6 +28,7 @@ struct ReadView: View {
     @State private var phase: Phase = .idle
     @State private var errorMessage: String?
     @State private var showingDiagnostics = false
+    @State private var showingBrowserURL = false
 
     enum Phase: Equatable {
         case idle
@@ -78,6 +79,9 @@ struct ReadView: View {
         }
         .sheet(isPresented: $showingDiagnostics) {
             RouteDiagnosticsView(player: player)
+        }
+        .sheet(isPresented: $showingBrowserURL) {
+            BrowserURLSheet(bookID: book.bookID, chapter: chapterIndex, page: player.currentPage)
         }
         .task { await prepare() }
         .onDisappear { persistProgress() }
@@ -149,6 +153,16 @@ struct ReadView: View {
                 Text(player.statusText)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+
+                Button {
+                    showingBrowserURL = true
+                } label: {
+                    Label("CarPlay 浏览器打开", systemImage: "car.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                .padding(.horizontal, 20)
             }
             .padding(.vertical, 16)
             .frame(maxWidth: .infinity)
