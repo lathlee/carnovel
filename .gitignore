@@ -45,3 +45,4 @@ Secrets.plist
 .vscode/
 .idea/
 *.swp
+ci-logs/

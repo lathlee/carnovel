@@ -1,14 +1,14 @@
 # 在 GitHub 的免费 macOS runner 上编译出**未签名**的 .ipa
 #
-# 为什么这么做：本机是 Windows，而编译器 Xcode 只有 macOS 有。
+# 背景：本机是 Windows，编译器 Xcode 只有 macOS 有。
 #   GitHub Actions 提供免费的 macOS runner，于是「Windows 写码 → 云端编译」成立。
 #
-# 注意：本仓库的根目录应该是 carplay-novel/ 这一层。
-#   如果你把代码放在仓库子目录里，给每个 step 加 working-directory。
+# 关于日志：公开仓库的 job 日志需要认证才能读，而本机没有 gh CLI（下载渠道也被
+#   部分墙掉）。所以这里额外做了一步 —— 把构建日志提交到 ci-logs 分支，
+#   这样可以直接从 raw.githubusercontent.com 读到，不需要任何认证。
 #
-# 关于 Xcode 版本：2026 年 4 月起，App Store Connect 相关工具链要求 Xcode 26+。
-#   本项目没有用到 iOS 27 新 API，部署目标 17.0，用 Xcode 26 编译即可。
-#   如果 macos-26 镜像不可用，改成 macos-15 再试。
+# 关于 Xcode 版本：本项目部署目标 iOS 17，没用 iOS 27 新 API，
+#   用 runner 自带的 Xcode 即可。若 macos-26 镜像不存在，改成 macos-15。
 
 name: Build unsigned IPA
 
@@ -16,6 +16,9 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+
+permissions:
+  contents: write        # 需要它才能把构建日志推到 ci-logs 分支
 
 jobs:
   build:
@@ -28,32 +31,51 @@ jobs:
         run: |
           xcodebuild -version
           sw_vers
+          echo "--- 可用 SDK ---"
+          xcodebuild -showsdks | grep -i iphoneos || true
 
       - name: 安装 XcodeGen
         run: brew install xcodegen
 
       - name: 生成 Xcode 工程
-        run: xcodegen generate
+        run: |
+          xcodegen generate
+          # XcodeGen 默认不写共享 scheme，所以下面编译时用 -target 而不是 -scheme。
+          ls -d CarNovel.xcodeproj
 
       - name: 编译（不签名）
+        id: build
+        continue-on-error: true
+        # 注意：没有加 `|| true`。
+        # 之前加了它，编译失败也被吞掉，到打包步骤才报"没找到 .app"，
+        # 真正的错误信息反而看不到。
         run: |
-          xcodebuild archive \
+          set -o pipefail
+          xcodebuild build \
             -project CarNovel.xcodeproj \
-            -scheme CarNovel \
+            -target CarNovel \
             -configuration Release \
-            -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/CarNovel.xcarchive" \
+            -sdk iphoneos \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGN_ENTITLEMENTS="" \
-            | xcbeautify || true
+            ONLY_ACTIVE_ARCH=NO \
+            2>&1 | tee "$RUNNER_TEMP/build.log" | tail -150
 
       - name: 打包成 .ipa
+        if: steps.build.outcome == 'success'
         run: |
           set -e
-          APP="$RUNNER_TEMP/CarNovel.xcarchive/Products/Applications/CarNovel.app"
-          test -d "$APP" || { echo "没找到 .app，编译大概失败了"; exit 1; }
+          APP=$(find "$RUNNER_TEMP/dd/Build/Products" -maxdepth 3 -name 'CarNovel.app' -type d | head -1)
+          if [ -z "$APP" ]; then
+            echo "没找到 CarNovel.app，产物目录内容："
+            find "$RUNNER_TEMP/dd/Build/Products" -maxdepth 3 || true
+            exit 1
+          fi
+          echo "找到 $APP"
+          rm -rf "$RUNNER_TEMP/Payload"
           mkdir -p "$RUNNER_TEMP/Payload"
           cp -R "$APP" "$RUNNER_TEMP/Payload/"
           cd "$RUNNER_TEMP"
@@ -61,9 +83,63 @@ jobs:
           ls -lh CarNovel.ipa
 
       - name: 上传产物
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: CarNovel-unsigned-ipa
           path: ${{ runner.temp }}/CarNovel.ipa
           if-no-files-found: error
           retention-days: 30
+
+      # ─────────────────────────────────────────────────────────────
+      #  把构建日志（成功时还带上 .ipa）推到 ci-logs 分支。
+      #
+      #  为什么要这么绕：
+      #    1. 公开仓库的 job 日志、artifact 下载都要认证，而本机没有 gh CLI
+      #       （winget 装不上、release 下载被 objects.githubusercontent.com 挡住）
+      #    2. 本机代理是规则模式，GitHub 的 artifact 重定向下载很可能也失败
+      #    3. 而 raw.githubusercontent.com 是通的
+      #  所以走「提交到分支 + raw 链接读取」这条路，零认证、零代理依赖。
+      #
+      #  只保留一次提交（--force），分支不会随时间膨胀。
+      # ─────────────────────────────────────────────────────────────
+      - name: 保留构建日志与产物
+        if: always()
+        run: |
+          set +e
+          mkdir -p ci-logs
+
+          {
+            echo "# 最后一次构建"
+            echo
+            echo "- 结果: **${{ steps.build.outcome }}**"
+            echo "- 提交: \`${{ github.sha }}\`"
+            echo "- 时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo
+            echo '```'
+            if [ -f "$RUNNER_TEMP/build.log" ]; then
+              tail -500 "$RUNNER_TEMP/build.log"
+            else
+              echo "(没有生成构建日志)"
+            fi
+            echo '```'
+          } > ci-logs/last-build.md
+
+          if [ -f "$RUNNER_TEMP/CarNovel.ipa" ]; then
+            cp "$RUNNER_TEMP/CarNovel.ipa" ci-logs/CarNovel.ipa
+            echo "已附带 CarNovel.ipa ($(du -h ci-logs/CarNovel.ipa | cut -f1))"
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin ci-logs --depth=1 2>/dev/null || true
+          git checkout -B ci-logs
+          git add -f ci-logs/
+          git commit -m "ci: 构建日志与产物 [skip ci]" || echo "内容无变化"
+          git push -f origin ci-logs
+
+      - name: 构建失败则让 job 失败
+        if: steps.build.outcome != 'success'
+        run: |
+          echo "编译失败。日志见 ci-logs 分支的 last-build.md"
+          exit 1
