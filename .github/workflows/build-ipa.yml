@@ -40,20 +40,18 @@ jobs:
       - name: 生成 Xcode 工程
         run: |
           xcodegen generate
-          # XcodeGen 默认不写共享 scheme，所以下面编译时用 -target 而不是 -scheme。
           ls -d CarNovel.xcodeproj
+          xcodebuild -project CarNovel.xcodeproj -list
 
       - name: 编译（不签名）
         id: build
-        continue-on-error: true
-        # 注意：没有加 `|| true`。
-        # 之前加了它，编译失败也被吞掉，到打包步骤才报"没找到 .app"，
-        # 真正的错误信息反而看不到。
+        # 注意：没有加 `continue-on-error: true`。
+        # 编译失败必须让 job 直接失败，日志由后面的"保留构建日志"步骤统一提交到 ci-logs。
         run: |
           set -o pipefail
           xcodebuild build \
             -project CarNovel.xcodeproj \
-            -target CarNovel \
+            -scheme CarNovel \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath "$RUNNER_TEMP/dd" \
