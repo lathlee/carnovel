@@ -13,6 +13,14 @@ struct BrowserURLSheet: View {
     let chapter: Int
     let page: Int
 
+    /// 显式写 init：结构体里既有 `@Environment` 又有 `private` 存储属性时，
+    /// 编译器合成的 memberwise init 会变成 private，外部就构造不了。
+    init(bookID: String, chapter: Int, page: Int) {
+        self.bookID = bookID
+        self.chapter = chapter
+        self.page = page
+    }
+
     private var currentURL: URL? {
         URL(string: server.readURL(bookID: bookID, chapter: chapter, page: page))
     }

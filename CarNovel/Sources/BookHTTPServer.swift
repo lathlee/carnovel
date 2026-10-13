@@ -113,7 +113,7 @@ final class BookHTTPServer: ObservableObject {
 
                 if let range = buffer.range(of: Data("\r\n\r\n".utf8)) {
                     let headerBytes = buffer.subdata(in: 0..<range.upperBound)
-                    guard let requestLine = parseRequestLine(from: headerBytes) else {
+                    guard let requestLine = self.parseRequestLine(from: headerBytes) else {
                         self.send404(connection)
                         return
                     }
@@ -254,7 +254,7 @@ final class BookHTTPServer: ObservableObject {
         guard let chapter = chapter, chapter >= 0 else { return errorHTML("缺少 chapter 参数") }
         guard let context = modelContainer?.mainContext else { return errorHTML("服务器未就绪") }
 
-        var descriptor = FetchDescriptor<ShelfBook>(predicate: #Predicate { $0.bookID == bookID })
+        let descriptor = FetchDescriptor<ShelfBook>(predicate: #Predicate { $0.bookID == bookID })
         guard let book = try? context.fetch(descriptor).first else {
             return errorHTML("书架里没有这本书，请先导入")
         }
@@ -268,6 +268,7 @@ final class BookHTTPServer: ObservableObject {
 
         // 分页：复用现有排版引擎（1920×1080 车机画布）
         let pages = Paginator.paginate(text, style: .car)
+        guard !pages.isEmpty else { return errorHTML("这一章没排版出任何页面") }
         let pageIndex = max(0, min(page ?? 0, pages.count - 1))
         let currentPage = pages[pageIndex]
 
@@ -281,6 +282,12 @@ final class BookHTTPServer: ObservableObject {
         // 章节列表快速跳转
         let chapterSelect = renderChapterSelect(bookID: bookID, chapters: book.chapterList, current: chapter)
 
+        // 翻页按钮先算好，避免在模板里写嵌套字符串插值
+        let prevButton = prevHref.map { "<a class='toolbtn' href='\($0)'>上一页</a>" }
+            ?? "<span class='toolbtn disabled'>上一页</span>"
+        let nextButton = nextHref.map { "<a class='toolbtn' href='\($0)'>下一页</a>" }
+            ?? "<span class='toolbtn disabled'>下一页</span>"
+
         return wrap(title: "\(book.title) · \(chapterRef.title)", body: """
         <div class="reader">
             <div class="chapter-title">\(escape(chapterRef.title))</div>
@@ -292,8 +299,8 @@ final class BookHTTPServer: ObservableObject {
         <div class="toolbar">
             <a class="toolbtn" href="/">返回书架</a>
             <select onchange="location.href=this.value">\(chapterSelect)</select>
-            \(prevHref != nil ? "<a class='toolbtn' href='\(prevHref!)'>上一页</a>" : "<span class='toolbtn disabled'>上一页</span>")
-            \(nextHref != nil ? "<a class='toolbtn' href='\(nextHref!)'>下一页</a>" : "<span class='toolbtn disabled'>下一页</span>")
+            \(prevButton)
+            \(nextButton)
         </div>
         """)
     }
