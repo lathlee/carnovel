@@ -7,7 +7,10 @@
 #   所以这里多做一步 —— 把构建日志和 .ipa 提交到 carnotify-build 分支，
 #   然后从 raw.githubusercontent.com 直接下，零认证、零代理依赖：
 #     https://raw.githubusercontent.com/lathlee/carnovel/carnotify-build/ci-logs/last-build.md
-#     https://raw.githubusercontent.com/lathlee/carnovel/carnotify-build/ci-logs/CarNotify.ipa
+#     https://raw.githubusercontent.com/lathlee/carnovel/carnotify-build/ci-logs/CarNotify-<版本号>-unsigned.ipa
+#
+# IPA 文件名带版本号，版本号的唯一来源是 CarNotify/project.yml 里的
+# MARKETING_VERSION —— 下面第一步读出来写进 $GITHUB_ENV，后面所有步骤引用。
 #
 # 注意：故意跟 CarNovel 的 ci-logs 分支分开，两边各自 --force 推送，
 #      互不覆盖。
@@ -40,6 +43,16 @@ jobs:
         run: |
           xcodebuild -version
           sw_vers
+
+      - name: 读取版本号（唯一来源 project.yml）
+        run: |
+          VER=$(sed -n 's/^ *MARKETING_VERSION: *"\([^"]*\)".*/\1/p' CarNotify/project.yml | head -1)
+          if [ -z "$VER" ]; then
+            echo "!! project.yml 里没找到 MARKETING_VERSION"
+            exit 1
+          fi
+          echo "VER=$VER" >> "$GITHUB_ENV"
+          echo "本次构建版本: $VER"
 
       - name: 安装 XcodeGen
         run: brew install xcodegen
@@ -124,15 +137,15 @@ jobs:
           mkdir -p "$RUNNER_TEMP/Payload"
           cp -R "$APP" "$RUNNER_TEMP/Payload/"
           cd "$RUNNER_TEMP"
-          zip -qry CarNotify.ipa Payload
-          ls -lh CarNotify.ipa
+          zip -qry "CarNotify-$VER-unsigned.ipa" Payload
+          ls -lh "CarNotify-$VER-unsigned.ipa"
 
       - name: 上传产物（保留 30 天）
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: CarNotify-unsigned-ipa
-          path: ${{ runner.temp }}/CarNotify.ipa
+          name: CarNotify-${{ env.VER }}-unsigned-ipa
+          path: ${{ runner.temp }}/CarNotify-${{ env.VER }}-unsigned.ipa
           if-no-files-found: error
           retention-days: 30
 
@@ -188,9 +201,9 @@ jobs:
             echo '```'
           } > ci-logs/last-build.md
 
-          if [ -f "$RUNNER_TEMP/CarNotify.ipa" ]; then
-            cp "$RUNNER_TEMP/CarNotify.ipa" ci-logs/CarNotify.ipa
-            echo "已附带 CarNotify.ipa ($(du -h ci-logs/CarNotify.ipa | cut -f1))"
+          if [ -f "$RUNNER_TEMP/CarNotify-$VER-unsigned.ipa" ]; then
+            cp "$RUNNER_TEMP/CarNotify-$VER-unsigned.ipa" "ci-logs/CarNotify-$VER-unsigned.ipa"
+            echo "已附带 CarNotify-$VER-unsigned.ipa ($(du -h "ci-logs/CarNotify-$VER-unsigned.ipa" | cut -f1))"
           fi
 
           git config user.name  "github-actions[bot]"
