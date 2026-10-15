@@ -50,7 +50,7 @@ var list=document.getElementById("list"),empty=document.getElementById("empty"),
     clock=document.getElementById("clock"),status=document.getElementById("status"),
     d=document.getElementById("d"),n=document.getElementById("n"),
     kern=document.getElementById("kern"),items=[];
-var K=null,kview=null,SLOT=[],H2S={},plain=[],SEQ=0;
+var K=null,kview=null,SLOT=[],H2S={},plain=[],SEQ=0,ws=null;
 var FS_MIN=14,FS_MAX=40,fs=parseInt(localStorage.getItem("fs"))||20;
 function setFs(v){fs=Math.max(FS_MIN,Math.min(FS_MAX,v));
   document.documentElement.style.setProperty("--fs",fs+"px");
@@ -114,14 +114,16 @@ function clearAll(){
 
 function conn(){
   setStatus("",false);
-  var w=new WebSocket("ws://"+location.host+"/ws");
+  var w=new WebSocket("ws://"+location.host+"/ws");ws=w;
   w.onopen=function(){d.className="dot on";setStatus("已连接",true)};
-  w.onmessage=function(ev){try{var j=JSON.parse(ev.data);
+  w.onmessage=function(ev){if(w!==ws)return;try{var j=JSON.parse(ev.data);
     if(j.type==="notify")add(j.item);
     else if(j.type==="clear")clearLocal();
-    else if(j.type==="hello"){(j.items||[]).forEach(add);draw();}
+    else if(j.type==="hello"){clearLocal();(j.items||[]).forEach(add);}
   }catch(x){}};
-  w.onclose=w.onerror=function(){d.className="dot";setStatus("未连接，3 秒后重连",false);setTimeout(conn,3000)};
+  w.onerror=function(){try{w.close()}catch(e){}};
+  w.onclose=function(){if(w!==ws)return;ws=null;
+    d.className="dot";setStatus("未连接，3 秒后重连",false);setTimeout(conn,3000)};
 }
 function clearLocal(){plain=[];SLOT=[];H2S={};if(K)K.os_clear();draw();}
 document.getElementById("plus").onclick=function(){setFs(fs+3)};

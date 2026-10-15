@@ -28,6 +28,13 @@ struct CarNotifyApp: App {
                     server.onPush = { _ in
                         BackgroundKeepAlive.shared.playAlert()
                         WidgetCenter.shared.reloadAllTimelines()
+                        // 锁屏时系统可能推迟单次 reload；错峰多试几次提高命中率
+                        // （WWDC25：App 运行中调用不占刷新预算，多调无副作用）
+                        for delay in [3.0, 15.0, 60.0] {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                                WidgetCenter.shared.reloadAllTimelines()
+                            }
+                        }
                     }
                     server.onClear = {
                         WidgetCenter.shared.reloadAllTimelines()
