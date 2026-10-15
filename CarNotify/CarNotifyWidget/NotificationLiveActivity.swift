@@ -15,7 +15,7 @@ import SwiftUI
 struct NotificationLiveActivity: Widget {
 
     var body: some WidgetConfiguration {
-        ActivityConfiguration(for: NotificationActivityAttributes.self) { context in
+        let base = ActivityConfiguration(for: NotificationActivityAttributes.self) { context in
             LiveNotificationView(state: context.state)
         } dynamicIsland: { context in
             DynamicIsland {
@@ -47,10 +47,15 @@ struct NotificationLiveActivity: Widget {
                     .foregroundColor(.green)
             }
         }
-        // 声明 .small 活动家族后，CarPlay（iOS 26）显示锁屏同款完整卡片；
-        // 不声明的话 CarPlay 只能回退到灵动岛的紧凑前后视图。
-        // 这个 API 要求 iOS 18，所以本扩展部署目标已提到 18.0。
-        .supplementalActivityFamilies([.small])
+        // CarPlay（iOS 26）实时活动需要显式 opt-in：把 .carPlay 加进 supplementalActivityFamilies。
+        // 仅写 .small（Apple 通用文档说法，覆盖 Apple Watch）时，APTV 这类第三方
+        // CarPlay 转接盒不会渲染，实测需要 .carPlay 才在车机显示。
+        // .carPlay 是 iOS 26 API，用 #available 守卫；本扩展部署目标已 18.0，
+        // AnyWidgetConfiguration 可用，用它擦除两个分支的不同类型。
+        if #available(iOS 26.0, *) {
+            return AnyWidgetConfiguration(base.supplementalActivityFamilies([.small, .carPlay]))
+        }
+        return AnyWidgetConfiguration(base.supplementalActivityFamilies([.small]))
     }
 }
 
