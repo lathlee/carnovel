@@ -45,19 +45,36 @@ enum LiveNotifier {
     }
 
     static func clear() {
-        lastState = nil
+        // 不清空 lastState、不结束活动 —— 只把内容复位成「监听中」，
+        // 保持活动常驻，这样后续锁屏下来的推送仍能直接 update（后台无法 request 新活动）。
+        lastState = Self.neutralState()
+        let state = lastState!
         Task {
-            for act in Activity<NotificationActivityAttributes>.activities {
-                await act.end(nil, dismissalPolicy: .immediate)
+            if let act = Activity<NotificationActivityAttributes>.activities.first {
+                await act.update(ActivityContent(state: state, staleDate: nil))
             }
         }
     }
 
-    /// App 回前台时调用：实时活动被系统按 8 小时上限结束后，在这里重建。
+    /// 没有通知时的占位状态 —— 活动必须先生效，后台推送才能 update。
+    private static func neutralState() -> NotificationActivityAttributes.ContentState {
+        NotificationActivityAttributes.ContentState(
+            app: "CarNotify",
+            title: "监听中",
+            body: "收到新通知会实时显示在这里",
+            count: 0,
+            ts: Int(Date().timeIntervalSince1970))
+    }
+
+    /// App 回前台 / 首次启动调用：保证活动始终存在。
+    /// - 若已有活动：跳过。
+    /// - 若没有（首次启动、或被系统 8 小时上限结束）：用最近一次状态或占位状态新建。
+    ///   占位状态保证「即使还没收到过通知，活动也已经生效」，
+    ///   这样锁屏下来的第一条真实推送就能直接 update，而不是卡在「后台无法新建」。
     static func ensureRunning() {
-        guard let state = lastState,
-              Activity<NotificationActivityAttributes>.activities.isEmpty,
-              ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled,
+              Activity<NotificationActivityAttributes>.activities.isEmpty else { return }
+        let state = lastState ?? Self.neutralState()
         _ = try? Activity.request(
             attributes: NotificationActivityAttributes(),
             content: ActivityContent(state: state, staleDate: nil))
@@ -78,6 +95,9 @@ struct CarNotifyApp: App {
                     // 反过来的话，如果 App 一起手就被切到后台，监听可能来不及起来。
                     BackgroundKeepAlive.shared.start()
                     server.start()
+                    // 首次启动就建立实时活动（前台才能 request）。
+                    // 之后锁屏下来的推送直接 update，不需要 App 再回到前台。
+                    LiveNotifier.ensureRunning()
 
                     // 新通知三件事：原生提示音（锁屏也能响，CarPlay 下走车喇叭）
                     //              + 小组件刷新（尽力而为，受系统调度约束）
