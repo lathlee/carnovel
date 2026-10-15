@@ -21,6 +21,8 @@ Payload/
 out/
 *.mp4
 *.png
+# 但 App 图标 PNG 必须入库，否则 CI 上 actool 找不到图标文件
+!CarNotify/CarNotify/Assets.xcassets/AppIcon.appiconset/*.png
 
 # ── Python ────────────────────────────────────────────────
 __pycache__/

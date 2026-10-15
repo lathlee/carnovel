@@ -89,11 +89,16 @@ jobs:
           echo "APP=$APP"
           echo "--- .app 根目录 ---"
           ls -l "$APP" | head -40
-          for f in index.html rtos.wasm; do
+          for f in index.html rtos.wasm Assets.car; do
             if [ -f "$APP/$f" ]; then
               echo "OK  $f  $(stat -f%z "$APP/$f") 字节"
             else
-              echo "!! 缺少 $f —— 车机上的页面会加载不出来"
+              echo "!! 缺少 $f"
+              if [ "$f" = "Assets.car" ]; then
+                echo "   通常是 AppIcon.appiconset 里的 PNG 被 .gitignore 漏掉了，actool 找不到图标文件。"
+              else
+                echo "   车机上的页面会加载不出来"
+              fi
               exit 1
             fi
           done
