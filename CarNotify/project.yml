@@ -16,6 +16,11 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
+    # 版本号全局唯一来源 —— 主 App 和小组件扩展两个 target 都要用，
+    # 放在 target 里的话扩展拿不到，Info.plist 里的版本键会被整个丢掉。
+    # Info.plist 里写的是 $(MARKETING_VERSION) / $(CURRENT_PROJECT_VERSION)。
+    MARKETING_VERSION: "1.1"
+    CURRENT_PROJECT_VERSION: "2"
     # 侧载不需要 Apple 签名 —— 签名交给 SideStore / AltStore 用免费 Apple ID 做
     CODE_SIGNING_ALLOWED: "NO"
     CODE_SIGNING_REQUIRED: "NO"
@@ -62,8 +67,6 @@ targets:
         PRODUCT_NAME: CarNotify
         INFOPLIST_FILE: CarNotify/Info.plist
         GENERATE_INFOPLIST_FILE: "NO"
-        MARKETING_VERSION: "1.1"
-        CURRENT_PROJECT_VERSION: "2"
         TARGETED_DEVICE_FAMILY: "1"
         ENABLE_USER_SCRIPT_SANDBOXING: "NO"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
