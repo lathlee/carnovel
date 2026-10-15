@@ -12,8 +12,9 @@
 //    提示音由主 App 原生播（BackgroundKeepAlive.playAlert），不在这里。
 //  - 数据不走 App Group 共享存储，直接 HTTP 拉本机服务器 /latest ——
 //    服务器常驻（静音音频保活），锁屏下也拿得到。
-//    实时刷新靠主 App 收到推送时调 WidgetCenter.reloadAllTimelines()，
-//    这里的 15 分钟只是兜底周期。
+//    实时刷新靠主 App 收到推送时调 WidgetCenter.reloadAllTimelines()。
+//    注意：App 在前台时系统立刻执行；App 在后台时受 WidgetKit 预算约束，
+//    会被推迟或丢弃（平台限制，无法绕过），所以 getTimeline 的兜底周期要短。
 //  - 点小组件不能启动 App（我们的 App 不是 CarPlay App，Apple 规则），
 //    所以没设 widgetURL；但触屏车机上按钮交互可用（清屏按钮）。
 //
@@ -59,7 +60,10 @@ struct LatestProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<LatestEntry>) -> Void) {
         fetch { entry in
-            let next = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
+            // WidgetKit 有刷新预算（后台 reload 会被推迟/丢弃），
+            // 这里只能靠缩短兜底周期多争取机会：正常 5 分钟，拉取失败 2 分钟就重试。
+            let wait = entry.reachable ? 5 : 2
+            let next = Calendar.current.date(byAdding: .minute, value: wait, to: Date()) ?? Date()
             completion(Timeline(entries: [entry], policy: .after(next)))
         }
     }
