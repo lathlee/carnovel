@@ -92,11 +92,11 @@ function add(m){
   draw();
 }
 function draw(){
-  var arr=kernelOrder(),run=runningItem(),isEmpty=arr.length===0;
+  var arr=kernelOrder(),isEmpty=arr.length===0;
   empty.className="empty"+(isEmpty?" show":"");
   n.textContent=arr.length+" 条";
   list.innerHTML=arr.map(function(m){
-    return '<div class="card'+(m===run?" run":"")+'"><div class="h">'
+    return '<div class="card"><div class="h">'
     +(m.app?'<span class="app">'+esc(m.app)+'</span>':"")
     +'<span class="t">'+esc(m.title)+'</span></div><div class="b">'+esc(m.body)+'</div>'
     +'<div class="time">'+fmt(m.ts)+'</div></div>'}).join("");
