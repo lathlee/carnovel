@@ -15,7 +15,7 @@ h1{font-size:20px;font-weight:600;letter-spacing:1px}
 .tools button{min-width:56px;padding:11px 12px;font-size:17px;font-weight:600;
   border:1px solid #2a4a30;background:#0d140d;color:#7ee787;border-radius:8px}
 .tools button.clear{min-width:64px;color:#ff9d9d;border-color:#4a2a2a;background:#140d0d}
-.card{background:#121a12;border:1px solid #22361f;border-left:3px solid #2ea043;border-radius:9px;padding:13px 15px;margin-bottom:16px}
+.card{background:#121a12;border:1px solid #22361f;border-left:3px solid #2ea043;border-radius:9px;padding:13px 15px;margin-bottom:32px}
 .card.run{border-color:#2ea043;background:#16241a}
 .h{display:flex;gap:9px;align-items:baseline;margin-bottom:6px;flex-wrap:wrap}
 .app{font-size:calc(var(--fs) * 0.62);color:#070b07;background:#2ea043;border-radius:5px;padding:2px 9px;font-weight:700}
@@ -50,7 +50,7 @@ var list=document.getElementById("list"),empty=document.getElementById("empty"),
     clock=document.getElementById("clock"),status=document.getElementById("status"),
     d=document.getElementById("d"),n=document.getElementById("n"),
     kern=document.getElementById("kern"),items=[];
-var K=null,kview=null,SLOT=[],H2S={},plain=[];
+var K=null,kview=null,SLOT=[],H2S={},plain=[],SEQ=0;
 var FS_MIN=14,FS_MAX=40,fs=parseInt(localStorage.getItem("fs"))||20;
 function setFs(v){fs=Math.max(FS_MIN,Math.min(FS_MAX,v));
   document.documentElement.style.setProperty("--fs",fs+"px");
@@ -87,12 +87,13 @@ function runningItem(){
   var s=H2S[h];return (s===undefined)?null:(SLOT[s]||null);
 }
 function add(m){
+  m.seq=++SEQ;
   if(K){var s=SLOT.length;SLOT.push(m);H2S[K.os_post(prioOf(m.app),TTL,s)]=s;}
   else plain.push(m);
   draw();
 }
 function draw(){
-  var arr=kernelOrder().slice().reverse(),isEmpty=arr.length===0;
+  var arr=kernelOrder().sort(function(a,b){return (b.seq||0)-(a.seq||0);}),isEmpty=arr.length===0;
   empty.className="empty"+(isEmpty?" show":"");
   n.textContent=arr.length+" 条";
   list.innerHTML=arr.map(function(m){
@@ -110,12 +111,37 @@ function clearAll(){
   draw();
   try{fetch("/clear",{method:"POST"})}catch(e){}
 }
+
+var AC=null;
+function beep(){
+  try{
+    if(!AC){var C=window.AudioContext||window.webkitAudioContext;if(!C)return;AC=new C();}
+    if(AC.state==="suspended")AC.resume();
+    if(AC.state==="suspended")return;            // 首次需用户手势解锁，跳过这一声
+    var t=AC.currentTime;
+    [[0,1318.5],[0.085,1760]].forEach(function(p){   // 短而清脆：两个快速高音
+      var o=AC.createOscillator(),g=AC.createGain();
+      o.type="triangle";o.frequency.value=p[1];
+      g.gain.setValueAtTime(0.0001,t+p[0]);
+      g.gain.exponentialRampToValueAtTime(0.12,t+p[0]+0.008);   // 不大声
+      g.gain.exponentialRampToValueAtTime(0.0001,t+p[0]+0.07);
+      o.connect(g);g.connect(AC.destination);
+      o.start(t+p[0]);o.stop(t+p[0]+0.085);
+    });
+  }catch(e){}
+}
+// 首次用户手势（打开页面/点按钮即算）解锁 AudioContext
+["touchstart","click","keydown"].forEach(function(ev){document.addEventListener(ev,function(){
+  if(!AC){var C=window.AudioContext||window.webkitAudioContext;if(C)AC=new C();}
+  if(AC&&AC.state==="suspended")AC.resume();
+},{passive:true});});
+
 function conn(){
   setStatus("",false);
   var w=new WebSocket("ws://"+location.host+"/ws");
   w.onopen=function(){d.className="dot on";setStatus("已连接",true)};
   w.onmessage=function(ev){try{var j=JSON.parse(ev.data);
-    if(j.type==="notify")add(j.item);
+    if(j.type==="notify"){add(j.item);beep();}
     else if(j.type==="clear")clearLocal();
     else if(j.type==="hello"){(j.items||[]).forEach(add);draw();}
   }catch(x){}};

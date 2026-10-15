@@ -46,6 +46,9 @@ targets:
       # 而网页里写的是相对路径 fetch("rtos.wasm")。
       - path: CarNotify/Pkg
         buildPhase: resources
+      # AppIcon.appiconset 所在的资源目录。XcodeGen 会自动把它编进 Assets.car，
+      # 并在这里显式指定 AppIcon 名称，确保 iPhone 主屏能显示图标。
+      - path: CarNotify/Assets.xcassets
 
     settings:
       base:
@@ -57,4 +60,5 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1"
         ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # 刻意不引入任何 CarPlay 能力 —— 车机屏由 APTV 的浏览器渲染
