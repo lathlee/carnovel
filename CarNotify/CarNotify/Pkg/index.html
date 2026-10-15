@@ -15,21 +15,28 @@ h1{font-size:20px;font-weight:600;letter-spacing:1px}
 .tools button{min-width:56px;padding:11px 12px;font-size:17px;font-weight:600;
   border:1px solid #2a4a30;background:#0d140d;color:#7ee787;border-radius:8px}
 .tools button.clear{min-width:64px;color:#ff9d9d;border-color:#4a2a2a;background:#140d0d}
+/* 顶部时钟：居中放大，常驻显示，预留约一条消息的高度 */
+.clockbar{text-align:center;margin:2px 0 18px;padding:8px 0;min-height:calc(var(--fs) * 3.6)}
+.clock{color:#ffffff;
+  font-family:ui-rounded,"SF Pro Rounded",-apple-system,"Hiragino Sans","PingFang SC",sans-serif;
+  font-weight:800;font-size:calc(var(--fs) * 3);line-height:1.1;letter-spacing:4px}
+/* 左右两列：左 = 微信，右 = 短信 */
+.cols{display:flex;gap:16px;align-items:flex-start}
+.col{flex:1;min-width:0}
+.col h2{font-size:calc(var(--fs) * 0.8);font-weight:700;margin-bottom:12px;text-align:center;
+  padding:8px;border-radius:8px;letter-spacing:3px}
+.col.wx h2{color:#070b07;background:#2ea043}
+.col.sms h2{color:#070b07;background:#388bfd}
 .card{background:#121a12;border:1px solid #22361f;border-left:3px solid #2ea043;border-radius:9px;padding:13px 15px;margin-bottom:32px}
-.card.run{border-color:#2ea043;background:#16241a}
+.col.wx .card{border-left-color:#2ea043}
+.col.sms .card{border-left-color:#388bfd}
 .h{display:flex;gap:9px;align-items:baseline;margin-bottom:6px;flex-wrap:wrap}
 .app{font-size:calc(var(--fs) * 0.62);color:#070b07;background:#2ea043;border-radius:5px;padding:2px 9px;font-weight:700}
-.card.run .app{background:#5ee06a}
+.col.sms .app{background:#388bfd}
 .t{font-size:calc(var(--fs) * 1.12);font-weight:600;color:#ffffff}
 .b{font-size:var(--fs);color:#ffffff;word-break:break-word;line-height:1.5;white-space:pre-wrap}
 .time{font-size:calc(var(--fs) * 0.62);color:#6f8f6f;margin-top:6px}
-.empty{display:none}
-.empty.show{display:block}
-.clock{text-align:center;color:#ffffff;
-  font-family:ui-rounded,"SF Pro Rounded",-apple-system,"Hiragino Sans","PingFang SC",sans-serif;
-  font-weight:800;font-size:calc(var(--fs) * 4);line-height:1.15;letter-spacing:2px;
-  padding:13vh 0 0}
-.status{text-align:center;font-size:calc(var(--fs) * 0.7);margin-top:18px;color:#6f8f6f}
+.status{text-align:center;font-size:calc(var(--fs) * 0.7);margin-top:10px;color:#6f8f6f}
 .status.on{color:#3fb950}
 </style></head><body>
 <div class="top">
@@ -39,17 +46,18 @@ h1{font-size:20px;font-weight:600;letter-spacing:1px}
   </span>
   <div class="kern" id="kern"></div>
 </div>
-<div id="list"></div>
-<div class="empty" id="empty">
-  <div class="clock" id="clock">--:--</div>
-  <div class="status" id="status"></div>
+<div class="clockbar"><span class="clock" id="clock">--:--</span></div>
+<div class="cols">
+  <div class="col wx"><h2>微信</h2><div id="colWX"></div></div>
+  <div class="col sms"><h2>短信</h2><div id="colSMS"></div></div>
 </div>
+<div class="status" id="status"></div>
 <script>
 var NONE=-1,TTL=900,SCRATCH=32768;
-var list=document.getElementById("list"),empty=document.getElementById("empty"),
-    clock=document.getElementById("clock"),status=document.getElementById("status"),
+var clock=document.getElementById("clock"),status=document.getElementById("status"),
+    colWX=document.getElementById("colWX"),colSMS=document.getElementById("colSMS"),
     d=document.getElementById("d"),n=document.getElementById("n"),
-    kern=document.getElementById("kern"),items=[];
+    kern=document.getElementById("kern");
 var K=null,kview=null,SLOT=[],H2S={},plain=[],SEQ=0,ws=null;
 var FS_MIN=14,FS_MAX=40,fs=parseInt(localStorage.getItem("fs"))||20;
 function setFs(v){fs=Math.max(FS_MIN,Math.min(FS_MAX,v));
@@ -60,6 +68,7 @@ function setStatus(t,on){status.textContent=t;status.className="status"+(on?" on
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function p2(x){return x<10?"0"+x:""+x}
 function fmt(ts){var d=new Date(ts*1000);return p2(d.getHours())+":"+p2(d.getMinutes())+":"+p2(d.getSeconds())}
+function h12(d){var h=d.getHours()%12;if(h===0)h=12;return p2(h);}
 function prioOf(app){var a=(app||"").toLowerCase();
   if(a.indexOf("电话")>=0||a.indexOf("来电")>=0)return 0;
   if(a.indexOf("短信")>=0||a.indexOf("信息")>=0)return 2;
@@ -67,6 +76,11 @@ function prioOf(app){var a=(app||"").toLowerCase();
   if(a.indexOf("邮件")>=0||a.indexOf("mail")>=0)return 5;
   if(a.indexOf("测试")>=0)return 7;
   return 6;}
+// 分列：微信 → 左，短信 → 右，其余（来电/邮件/App自检等）不显示
+function catOf(app){var a=(app||"").toLowerCase();
+  if(a.indexOf("微信")>=0||a.indexOf("wechat")>=0)return "wx";
+  if(a.indexOf("短信")>=0||a.indexOf("信息")>=0||a.indexOf("sms")>=0||a.indexOf("messages")>=0)return "sms";
+  return "other";}
 function bootKern(){
   return fetch("rtos.wasm").then(function(r){return r.arrayBuffer()})
     .then(function(b){return WebAssembly.instantiate(b,{})})
@@ -81,37 +95,36 @@ function kernelOrder(){
   for(i=0;i<c;i++){var h=kview[1+i],s=H2S[h];if(s!==undefined&&SLOT[s])out.push(SLOT[s]);}
   return out;
 }
-function runningItem(){
-  if(!K)return null;
-  var h=K.os_running();if(h===NONE)return null;
-  var s=H2S[h];return (s===undefined)?null:(SLOT[s]||null);
-}
 function add(m){
   m.seq=++SEQ;
   if(K){var s=SLOT.length;SLOT.push(m);H2S[K.os_post(prioOf(m.app),TTL,s)]=s;}
   else plain.push(m);
   draw();
 }
-function draw(){
-  var arr=kernelOrder().sort(function(a,b){return (b.seq||0)-(a.seq||0);}),isEmpty=arr.length===0;
-  empty.className="empty"+(isEmpty?" show":"");
-  n.textContent=arr.length+" 条";
-  list.innerHTML=arr.map(function(m){
-    return '<div class="card"><div class="h">'
+function cardHTML(m){
+  return '<div class="card"><div class="h">'
     +(m.app?'<span class="app">'+esc(m.app)+'</span>':"")
     +'<span class="t">'+esc(m.title)+'</span></div><div class="b">'+esc(m.body)+'</div>'
-    +'<div class="time">'+fmt(m.ts)+'</div></div>'}).join("");
+    +'<div class="time">'+fmt(m.ts)+'</div></div>';
+}
+function draw(){
+  // 纯按到达顺序（seq 倒序）：新的永远在最上面
+  var arr=kernelOrder().sort(function(a,b){return (b.seq||0)-(a.seq||0);});
+  var wx=[],sms=[];
+  arr.forEach(function(m){var c=catOf(m.app);if(c==="wx")wx.push(m);else if(c==="sms")sms.push(m);});
+  n.textContent=(wx.length+sms.length)+" 条";
+  colWX.innerHTML=wx.map(cardHTML).join("");
+  colSMS.innerHTML=sms.map(cardHTML).join("");
   if(K)kern.textContent="内核 tick "+K.os_stats(0)+" · 抢占 "+K.os_stats(3)
     +" · 过期 "+K.os_stats(2)+" · 提交 "+K.os_stats(1);
   else kern.textContent="内核未加载，按到达顺序显示";
 }
 function clearAll(){
-  items=[];plain=[];SLOT=[];H2S={};
+  plain=[];SLOT=[];H2S={};
   if(K)K.os_clear();
   draw();
   try{fetch("/clear",{method:"POST"})}catch(e){}
 }
-
 function conn(){
   setStatus("",false);
   var w=new WebSocket("ws://"+location.host+"/ws");ws=w;
@@ -129,7 +142,9 @@ function clearLocal(){plain=[];SLOT=[];H2S={};if(K)K.os_clear();draw();}
 document.getElementById("plus").onclick=function(){setFs(fs+3)};
 document.getElementById("minus").onclick=function(){setFs(fs-3)};
 document.getElementById("clr").onclick=clearAll;
-(function tick(){var dd=new Date();clock.textContent=p2(dd.getHours())+":"+p2(dd.getMinutes());setTimeout(tick,5000)})();
-setInterval(function(){if(K){K.os_tick();draw();}},1000);
+// 时钟：12 小时制 HH:MM，每秒校正一次（只在整分翻面时变化）
+(function tick(){var dd=new Date();clock.textContent=h12(dd)+":"+p2(dd.getMinutes());setTimeout(tick,1000)})();
+// 内核滴答（推进 TTL 记账），但不再每秒重绘整页，避免列滚动跳动/闪烁
+setInterval(function(){if(K)K.os_tick();},1000);
 bootKern().then(function(){draw();conn();});
 </script></body></html>
