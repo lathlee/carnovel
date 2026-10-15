@@ -207,6 +207,11 @@ class Server:
                 "history": len(self.history),
             })
             return
+        if (method, path) == ("GET", "/latest"):
+            # 和 Swift 一致：history.suffix(10).reversed()，新的在前
+            latest = list(reversed(self.history[-10:]))
+            self.send_json(key, 200, {"ok": True, "items": latest})
+            return
 
         self.send_text(key, 404, "text/plain; charset=utf-8", "Not Found")
 
@@ -597,6 +602,54 @@ op, payload, _ = decode_frame(rest)
 hello = json.loads(payload.decode())
 check("后连上的页面拿到 50 条历史", len(hello["items"]), 50)
 check("历史第一条 title 10", hello["items"][0]["title"], "10")
+
+# ═══════════════════════════════════════════════════════════════════
+#  13. GET /latest ：小组件的数据源
+# ═══════════════════════════════════════════════════════════════════
+
+def push_one(server, key, title):
+    one = json.dumps({"app": "测试", "title": title, "body": "x"},
+                     ensure_ascii=False).encode()
+    new_conn(server, key)
+    server.receive(key, (b"POST /push HTTP/1.1\r\nContent-Length: "
+                         + str(len(one)).encode() + b"\r\n\r\n" + one))
+
+
+# 空历史
+s = Server()
+k = new_conn(s, "l0")
+s.receive(k, b"GET /latest HTTP/1.1\r\nHost: x\r\n\r\n")
+status, _, body = split_response(wire(s, k))
+check("/latest 空历史状态码", status, 200)
+check("/latest 空历史 items", json.loads(body)["items"], [])
+
+# 少于 10 条：新的在前
+s = Server()
+for i in range(3):
+    push_one(s, "p%d" % i, "t%d" % i)
+k = new_conn(s, "l1")
+s.receive(k, b"GET /latest HTTP/1.1\r\nHost: x\r\n\r\n")
+status, _, body = split_response(wire(s, k))
+items = json.loads(body)["items"]
+check("/latest 3 条时状态码", status, 200)
+check("/latest 3 条时返回 3 条", len(items), 3)
+check("/latest 新的在前", [it["title"] for it in items], ["t2", "t1", "t0"])
+
+# 超过 50 条截断后，/latest 只给最后 10 条，且仍是新的在前
+s = Server()
+for i in range(60):
+    push_one(s, "p%d" % i, "t%d" % i)
+k = new_conn(s, "l2")
+s.receive(k, b"GET /latest HTTP/1.1\r\nHost: x\r\n\r\n")
+status, _, body = split_response(wire(s, k))
+items = json.loads(body)["items"]
+check("/latest 截断后状态码", status, 200)
+check("/latest 最多 10 条", len(items), 10)
+check("/latest 截断后最新是 t59", items[0]["title"], "t59")
+check("/latest 截断后最老是 t50", items[-1]["title"], "t50")
+
+# /latest 响应之后连接要关掉（跟其他 JSON 端点一致）
+check("/latest 响应后断开连接", k in s.clients, False)
 
 # ═══════════════════════════════════════════════════════════════════
 #  报告
