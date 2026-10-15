@@ -80,6 +80,11 @@
         <string>audio</string>
     </array>
 
+    <!-- 实时活动：锁屏 / 灵动岛 / CarPlay（iOS 26）实时显示最新通知。
+         本地更新（Activity.update）不走小组件那套刷新调度，锁屏即时生效。 -->
+    <key>NSSupportsLiveActivities</key>
+    <true/>
+
     <!-- 文件共享：方便把改好的 index.html 拖进去，不用重新编译 -->
     <key>UIFileSharingEnabled</key>
     <true/>

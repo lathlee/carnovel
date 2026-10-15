@@ -191,5 +191,6 @@ struct LatestNotificationWidget: Widget {
 struct CarNotifyWidgetBundle: WidgetBundle {
     var body: some Widget {
         LatestNotificationWidget()
+        NotificationLiveActivity()
     }
 }

@@ -19,8 +19,8 @@ settings:
     # 版本号全局唯一来源 —— 主 App 和小组件扩展两个 target 都要用，
     # 放在 target 里的话扩展拿不到，Info.plist 里的版本键会被整个丢掉。
     # Info.plist 里写的是 $(MARKETING_VERSION) / $(CURRENT_PROJECT_VERSION)。
-    MARKETING_VERSION: "1.1"
-    CURRENT_PROJECT_VERSION: "2"
+    MARKETING_VERSION: "1.2"
+    CURRENT_PROJECT_VERSION: "3"
     # 侧载不需要 Apple 签名 —— 签名交给 SideStore / AltStore 用免费 Apple ID 做
     CODE_SIGNING_ALLOWED: "NO"
     CODE_SIGNING_REQUIRED: "NO"
@@ -45,6 +45,8 @@ targets:
       - path: CarNotify/UI
       - path: CarNotify/NotifyServer.swift
       - path: CarNotify/BackgroundKeepAlive.swift
+      # 实时活动数据模型 —— 主 App 与小组件扩展共用一份定义（ActivityKit 规矩）
+      - path: CarNotify/Shared
       # Pkg 里的 index.html + rtos.wasm 显式当资源。
       # 关键点：必须是 buildPhase: resources（逐个文件加进 Resources 阶段），
       # 不能用 folder reference —— 那会变成 .app/Pkg/index.html，
@@ -84,6 +86,7 @@ targets:
 
     sources:
       - path: CarNotifyWidget
+      - path: CarNotify/Shared
 
     settings:
       base:
