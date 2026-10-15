@@ -15,7 +15,7 @@ import SwiftUI
 struct NotificationLiveActivity: Widget {
 
     var body: some WidgetConfiguration {
-        let base = ActivityConfiguration(for: NotificationActivityAttributes.self) { context in
+        ActivityConfiguration(for: NotificationActivityAttributes.self) { context in
             LiveNotificationView(state: context.state)
         } dynamicIsland: { context in
             DynamicIsland {
@@ -47,13 +47,10 @@ struct NotificationLiveActivity: Widget {
                     .foregroundColor(.green)
             }
         }
-        // 关键：声明 .small 活动家族后，CarPlay（iOS 26）显示锁屏同款视图；
+        // 声明 .small 活动家族后，CarPlay（iOS 26）显示锁屏同款完整卡片；
         // 不声明的话 CarPlay 只能回退到灵动岛的紧凑前后视图。
-        // 这是 iOS 18 的 API，17 上退回紧凑视图（CarPlay 实时活动本来就要求 iOS 26）。
-        if #available(iOS 18.0, *) {
-            return AnyWidgetConfiguration(base.supplementalActivityFamilies([.small]))
-        }
-        return AnyWidgetConfiguration(base)
+        // 这个 API 要求 iOS 18，所以本扩展部署目标已提到 18.0。
+        .supplementalActivityFamilies([.small])
     }
 }
 
