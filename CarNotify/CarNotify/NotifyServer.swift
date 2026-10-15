@@ -43,6 +43,14 @@ final class NotifyServer: ObservableObject {
     @Published private(set) var lastError: String = ""
     @Published private(set) var pushedCount = 0
 
+    // MARK: - App 层挂钩（主线程回调）
+
+    /// 每收到一条新通知（快捷指令 POST 和 App 内自检按钮都走这里）。
+    /// App 在这里挂两件事：原生提示音 + 小组件立刻重绘。
+    var onPush: (([String: Any]) -> Void)?
+    /// 清屏时回调。小组件要跟着清，不然车机上还挂着旧消息。
+    var onClear: (() -> Void)?
+
     static let preferredPort: UInt16 = 8081
 
     var urlString: String { "http://127.0.0.1:\(port)/" }
@@ -178,7 +186,10 @@ final class NotifyServer: ObservableObject {
                 self.history.removeFirst(self.history.count - self.historyLimit)
             }
             self.broadcast(["type": "notify", "item": item])
-            DispatchQueue.main.async { self.pushedCount += 1 }
+            DispatchQueue.main.async {
+                self.pushedCount += 1
+                self.onPush?(item)
+            }
         }
     }
 
@@ -187,6 +198,7 @@ final class NotifyServer: ObservableObject {
             guard let self else { return }
             self.history.removeAll()
             self.broadcast(["type": "clear"])
+            DispatchQueue.main.async { self.onClear?() }
         }
     }
 
@@ -335,6 +347,13 @@ final class NotifyServer: ObservableObject {
                 "clients": clients.values.filter { $0.isWebSocket }.count,
                 "history": history.count,
             ])
+
+        // 小组件（CarPlay / 主屏）的数据源。新的在前，最多 10 条。
+        // 刻意不走 App Group 共享存储：服务器常驻（静音音频保活），
+        // 小组件的 TimelineProvider 直接 HTTP 拉，锁屏下也拿得到。
+        case ("GET", "/latest"):
+            let latest = Array(history.suffix(10).reversed())
+            sendJSON(key: key, code: 200, object: ["ok": true, "items": latest])
 
         default:
             sendText(key: key, code: 404,

@@ -102,6 +102,13 @@ jobs:
               exit 1
             fi
           done
+          # 小组件扩展必须嵌进来，没有它 CarPlay 小组件和主屏小组件都不会出现
+          if [ -d "$APP/PlugIns/CarNotifyWidget.appex" ]; then
+            echo "OK  PlugIns/CarNotifyWidget.appex"
+          else
+            echo "!! 缺少 PlugIns/CarNotifyWidget.appex —— 小组件没被打包"
+            exit 1
+          fi
 
       - name: 打包成 .ipa
         if: steps.build.outcome == 'success'

@@ -170,6 +170,11 @@ struct ContentView: View {
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
                 .padding(.top, 4)
+
+            sectionTitle("CarPlay 小组件（iOS 26+）")
+                .padding(.top, 6)
+            bullet("iPhone 设置 → 通用 → CarPlay → 选本车 → 小组件 → 添加「最新通知」")
+            bullet("提示音由 App 原生播放（锁屏可响、走车喇叭），不依赖 APTV 页面开着")
         }
     }
 

@@ -33,6 +33,10 @@ final class BackgroundKeepAlive {
     private var silence: AVAudioPCMBuffer?
     private var observer: NSObjectProtocol?
 
+    // 提示音专用节点：跟保活静音共用一个引擎，互不打断
+    private var alertPlayer: AVAudioPlayerNode?
+    private var alertBuffer: AVAudioPCMBuffer?
+
     private init() {}
 
     /// App 启动时调一次。重复调用安全。
@@ -112,9 +116,62 @@ final class BackgroundKeepAlive {
         // 把 mixer 音量设成 0 反而有风险：万一系统据此判定"没在播音频"，
         // 后台执行权可能被收回，那就白折腾了。
 
+        // 提示音节点现在就挂上（引擎还没跑，加节点最安全）
+        let ap = AVAudioPlayerNode()
+        e.attach(ap)
+        e.connect(ap, to: e.mainMixerNode, format: format)
+        alertPlayer = ap
+        alertBuffer = makeAlertBuffer()
+
         engine = e
         player = p
         silence = buffer
+    }
+
+    // MARK: - 原生提示音
+    //
+    //  新通知到达时响一声，短而清脆、不大声。
+    //  走的就是保活这套引擎和会话：锁屏 / 息屏能响，
+    //  CarPlay 连着时从车喇叭出（playback 类别的音频会路由给车机）。
+    //
+    //  刻意不加 .duckOthers —— 我们的会话是常驻的，
+    //  加了它别人的音乐就永远被压低，那就成噪音了。
+    //  音量本身压到 0.12，混在音乐里刚刚能听见，符合"不用太大声"。
+
+    func playAlert() {
+        guard active, let e = engine, e.isRunning,
+              let p = alertPlayer, let buf = alertBuffer else { return }
+        if !p.isPlaying { p.play() }
+        // 连续来多条时排队补播，不叠加（叠加会变噪音）
+        p.scheduleBuffer(buf, at: nil, options: [], completionHandler: nil)
+    }
+
+    /// 两段短音：E6(1318.5Hz) 85ms → 静 85ms → A6(1760Hz) 85ms。
+    /// 段内做 6ms 淡入淡出，防爆音的"咔哒"声。
+    private func makeAlertBuffer() -> AVAudioPCMBuffer? {
+        let sr: Float = 44100
+        let seg = Int(sr * 0.085)
+        let fade = 256
+        let total = seg * 3
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: Double(sr), channels: 1),
+              let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(total)),
+              let ch = buf.floatChannelData else { return nil }
+        buf.frameLength = AVAudioFrameCount(total)
+
+        let tones: [Float] = [1318.5, 1760]
+        for i in 0..<total {
+            var v: Float = 0
+            if i < seg {
+                v = sin(2 * Float.pi * tones[0] * Float(i) / sr)
+            } else if i >= seg * 2 {
+                v = sin(2 * Float.pi * tones[1] * Float(i - seg * 2) / sr)
+            }
+            let p = i % seg
+            if p < fade { v *= Float(p) / Float(fade) }
+            if p > seg - fade { v *= Float(seg - p) / Float(fade) }
+            ch[0][i] = v * 0.12
+        }
+        return buf
     }
 
     private func startPlayback() {

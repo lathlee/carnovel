@@ -5,6 +5,7 @@
 
 import SwiftUI
 import UIKit
+import WidgetKit
 
 @main
 struct CarNotifyApp: App {
@@ -19,6 +20,16 @@ struct CarNotifyApp: App {
                     // 反过来的话，如果 App 一起手就被切到后台，监听可能来不及起来。
                     BackgroundKeepAlive.shared.start()
                     server.start()
+
+                    // 新通知：原生提示音（锁屏也能响，CarPlay 下走车喇叭）
+                    //          + 让小组件立刻重绘（不等 15 分钟的兜底刷新）
+                    server.onPush = { _ in
+                        BackgroundKeepAlive.shared.playAlert()
+                        WidgetCenter.shared.reloadAllTimelines()
+                    }
+                    server.onClear = {
+                        WidgetCenter.shared.reloadAllTimelines()
+                    }
                 }
         }
     }

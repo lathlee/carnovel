@@ -112,36 +112,12 @@ function clearAll(){
   try{fetch("/clear",{method:"POST"})}catch(e){}
 }
 
-var AC=null;
-function beep(){
-  try{
-    if(!AC){var C=window.AudioContext||window.webkitAudioContext;if(!C)return;AC=new C();}
-    if(AC.state==="suspended")AC.resume();
-    if(AC.state==="suspended")return;            // 首次需用户手势解锁，跳过这一声
-    var t=AC.currentTime;
-    [[0,1318.5],[0.085,1760]].forEach(function(p){   // 短而清脆：两个快速高音
-      var o=AC.createOscillator(),g=AC.createGain();
-      o.type="triangle";o.frequency.value=p[1];
-      g.gain.setValueAtTime(0.0001,t+p[0]);
-      g.gain.exponentialRampToValueAtTime(0.12,t+p[0]+0.008);   // 不大声
-      g.gain.exponentialRampToValueAtTime(0.0001,t+p[0]+0.07);
-      o.connect(g);g.connect(AC.destination);
-      o.start(t+p[0]);o.stop(t+p[0]+0.085);
-    });
-  }catch(e){}
-}
-// 首次用户手势（打开页面/点按钮即算）解锁 AudioContext
-["touchstart","click","keydown"].forEach(function(ev){document.addEventListener(ev,function(){
-  if(!AC){var C=window.AudioContext||window.webkitAudioContext;if(C)AC=new C();}
-  if(AC&&AC.state==="suspended")AC.resume();
-},{passive:true});});
-
 function conn(){
   setStatus("",false);
   var w=new WebSocket("ws://"+location.host+"/ws");
   w.onopen=function(){d.className="dot on";setStatus("已连接",true)};
   w.onmessage=function(ev){try{var j=JSON.parse(ev.data);
-    if(j.type==="notify"){add(j.item);beep();}
+    if(j.type==="notify")add(j.item);
     else if(j.type==="clear")clearLocal();
     else if(j.type==="hello"){(j.items||[]).forEach(add);draw();}
   }catch(x){}};
