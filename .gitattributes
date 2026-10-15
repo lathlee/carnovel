@@ -4,3 +4,8 @@
 *.py text eol=lf
 *.md text eol=lf
 *.plist text eol=lf
+
+# 二进制资源：显式声明，绝不能让 git 做行尾/编码转换
+# （wasm 里必然含 NUL 字节，text=auto 一般也能识别，但不写就是赌运气）
+*.wasm binary
+*.ipa  binary

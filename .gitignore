@@ -10,6 +10,7 @@ xcuserdata/
 
 # XcodeGen 是生成物，由 project.yml 描述，不入库
 CarNovel.xcodeproj/
+CarNotify.xcodeproj/
 
 # ── 构建产物 ───────────────────────────────────────────────
 *.ipa

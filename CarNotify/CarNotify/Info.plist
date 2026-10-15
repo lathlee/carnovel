@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    CarNotify / Info.plist
+
+    跟 CarNovel 一样，这里**故意没有** CarPlay 相关键：
+      没有 UISceneConfigurations → CPTemplateApplicationSceneSessionRoleApplication
+      没有 com.apple.developer.carplay-* entitlement
+
+    我们不申请 CarPlay App，车机屏是 APTV 的浏览器在渲染，
+    这个 App 只负责：起服务器 + 后台保活 + 提供页面。
+-->
+<plist version="1.0">
+<dict>
+
+    <key>CFBundleDevelopmentRegion</key>
+    <string>zh_CN</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>CarNotify</string>
+
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+
+    <key>CFBundleVersion</key>
+    <string>1</string>
+
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+
+    <key>MinimumOSVersion</key>
+    <string>17.0</string>
+
+    <key>UILaunchScreen</key>
+    <dict/>
+
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+
+    <!--
+        ★ 核心：后台保活。
+
+        audio   —— 播放一段无声的音频，让 App 在息屏/后台时不挂起。
+                   这是最成熟的保活手段，代价是"正在播放"会有显示。
+        network —— 更好的选择：App 作为 TCP 服务器持续监听时，
+                   iOS 允许它留在后台。Long-lived socket 是官方认可的理由之一。
+                   两个都声明，实际由代码按需启用。
+    -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+        <string>network</string>
+    </array>
+
+    <!-- 文件共享：方便把改好的 index.html 拖进去，不用重新编译 -->
+    <key>UIFileSharingEnabled</key>
+    <true/>
+
+    <key>LSSupportsOpeningDocumentsInPlace</key>
+    <true/>
+
+    <!-- 服务器只绑定 127.0.0.1，不监听局域网；但 WebView 走本地回环仍需说明 -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>在手机内部提供网页服务，供车载屏幕上的浏览器访问</string>
+
+    <!-- 回环地址本身豁免 ATS，这里只是保险 -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+
+</dict>
+</plist>

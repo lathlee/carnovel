@@ -1,0 +1,131 @@
+<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>通知中心</title>
+<style>
+:root{--fs:20px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:16px/1.5 ui-monospace,Menlo,-apple-system,"PingFang SC",monospace;background:#070b07;color:#ffffff;padding:16px;min-height:100vh}
+.top{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.dot{width:10px;height:10px;border-radius:50%;background:#444;flex:none}
+.dot.on{background:#3fb950}
+h1{font-size:20px;font-weight:600;letter-spacing:1px}
+.cnt{font-size:13px;color:#6f8f6f}
+.kern{font-size:11px;color:#3f5a3f;flex-basis:100%;margin-top:-4px}
+.tools{margin-left:auto;display:flex;gap:8px;flex:none}
+.tools button{min-width:56px;padding:11px 12px;font-size:17px;font-weight:600;
+  border:1px solid #2a4a30;background:#0d140d;color:#7ee787;border-radius:8px}
+.tools button.clear{min-width:64px;color:#ff9d9d;border-color:#4a2a2a;background:#140d0d}
+.card{background:#121a12;border:1px solid #22361f;border-left:3px solid #2ea043;border-radius:9px;padding:13px 15px;margin-bottom:10px}
+.card.run{border-color:#2ea043;background:#16241a}
+.h{display:flex;gap:9px;align-items:baseline;margin-bottom:6px;flex-wrap:wrap}
+.app{font-size:calc(var(--fs) * 0.62);color:#070b07;background:#2ea043;border-radius:5px;padding:2px 9px;font-weight:700}
+.card.run .app{background:#5ee06a}
+.t{font-size:calc(var(--fs) * 1.12);font-weight:600;color:#ffffff}
+.b{font-size:var(--fs);color:#ffffff;word-break:break-word;line-height:1.5;white-space:pre-wrap}
+.time{font-size:calc(var(--fs) * 0.62);color:#6f8f6f;margin-top:6px}
+.empty{display:none}
+.empty.show{display:block}
+.clock{text-align:center;color:#ffffff;
+  font-family:ui-rounded,"SF Pro Rounded",-apple-system,"Hiragino Sans","PingFang SC",sans-serif;
+  font-weight:800;font-size:calc(var(--fs) * 4);line-height:1.15;letter-spacing:2px;
+  padding:13vh 0 0}
+.status{text-align:center;font-size:calc(var(--fs) * 0.7);margin-top:18px;color:#6f8f6f}
+.status.on{color:#3fb950}
+</style></head><body>
+<div class="top">
+  <span class="dot" id="d"></span><h1>通知中心</h1><span class="cnt" id="n">0 条</span>
+  <span class="tools">
+    <button id="minus">A-</button><button id="plus">A+</button><button id="clr" class="clear">清屏</button>
+  </span>
+  <div class="kern" id="kern"></div>
+</div>
+<div id="list"></div>
+<div class="empty" id="empty">
+  <div class="clock" id="clock">--:--</div>
+  <div class="status" id="status"></div>
+</div>
+<script>
+var NONE=-1,TTL=900,SCRATCH=32768;
+var list=document.getElementById("list"),empty=document.getElementById("empty"),
+    clock=document.getElementById("clock"),status=document.getElementById("status"),
+    d=document.getElementById("d"),n=document.getElementById("n"),
+    kern=document.getElementById("kern"),items=[];
+var K=null,kview=null,SLOT=[],H2S={},plain=[];
+var FS_MIN=14,FS_MAX=40,fs=parseInt(localStorage.getItem("fs"))||20;
+function setFs(v){fs=Math.max(FS_MIN,Math.min(FS_MAX,v));
+  document.documentElement.style.setProperty("--fs",fs+"px");
+  try{localStorage.setItem("fs",fs)}catch(e){}}
+setFs(fs);
+function setStatus(t,on){status.textContent=t;status.className="status"+(on?" on":"");}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function p2(x){return x<10?"0"+x:""+x}
+function fmt(ts){var d=new Date(ts*1000);return p2(d.getHours())+":"+p2(d.getMinutes())+":"+p2(d.getSeconds())}
+function prioOf(app){var a=(app||"").toLowerCase();
+  if(a.indexOf("电话")>=0||a.indexOf("来电")>=0)return 0;
+  if(a.indexOf("短信")>=0||a.indexOf("信息")>=0)return 2;
+  if(a.indexOf("微信")>=0)return 3;
+  if(a.indexOf("邮件")>=0||a.indexOf("mail")>=0)return 5;
+  if(a.indexOf("测试")>=0)return 7;
+  return 6;}
+function bootKern(){
+  return fetch("rtos.wasm").then(function(r){return r.arrayBuffer()})
+    .then(function(b){return WebAssembly.instantiate(b,{})})
+    .then(function(m){K=m.instance.exports;K.os_init();
+      kview=new Uint32Array(K.memory.buffer,SCRATCH,65);})
+    .catch(function(){K=null;});
+}
+function kernelOrder(){
+  if(!K)return plain;
+  K.os_ready_list(SCRATCH);
+  var c=kview[0],out=[],i;
+  for(i=0;i<c;i++){var h=kview[1+i],s=H2S[h];if(s!==undefined&&SLOT[s])out.push(SLOT[s]);}
+  return out;
+}
+function runningItem(){
+  if(!K)return null;
+  var h=K.os_running();if(h===NONE)return null;
+  var s=H2S[h];return (s===undefined)?null:(SLOT[s]||null);
+}
+function add(m){
+  if(K){var s=SLOT.length;SLOT.push(m);H2S[K.os_post(prioOf(m.app),TTL,s)]=s;}
+  else plain.push(m);
+  draw();
+}
+function draw(){
+  var arr=kernelOrder(),run=runningItem(),isEmpty=arr.length===0;
+  empty.className="empty"+(isEmpty?" show":"");
+  n.textContent=arr.length+" 条";
+  list.innerHTML=arr.map(function(m){
+    return '<div class="card'+(m===run?" run":"")+'"><div class="h">'
+    +(m.app?'<span class="app">'+esc(m.app)+'</span>':"")
+    +'<span class="t">'+esc(m.title)+'</span></div><div class="b">'+esc(m.body)+'</div>'
+    +'<div class="time">'+fmt(m.ts)+'</div></div>'}).join("");
+  if(K)kern.textContent="内核 tick "+K.os_stats(0)+" · 抢占 "+K.os_stats(3)
+    +" · 过期 "+K.os_stats(2)+" · 提交 "+K.os_stats(1);
+  else kern.textContent="内核未加载，按到达顺序显示";
+}
+function clearAll(){
+  items=[];plain=[];SLOT=[];H2S={};
+  if(K)K.os_clear();
+  draw();
+  try{fetch("/clear",{method:"POST"})}catch(e){}
+}
+function conn(){
+  setStatus("",false);
+  var w=new WebSocket("ws://"+location.host+"/ws");
+  w.onopen=function(){d.className="dot on";setStatus("已连接",true)};
+  w.onmessage=function(ev){try{var j=JSON.parse(ev.data);
+    if(j.type==="notify")add(j.item);
+    else if(j.type==="clear")clearLocal();
+    else if(j.type==="hello"){(j.items||[]).forEach(add);draw();}
+  }catch(x){}};
+  w.onclose=w.onerror=function(){d.className="dot";setStatus("未连接，3 秒后重连",false);setTimeout(conn,3000)};
+}
+function clearLocal(){plain=[];SLOT=[];H2S={};if(K)K.os_clear();draw();}
+document.getElementById("plus").onclick=function(){setFs(fs+3)};
+document.getElementById("minus").onclick=function(){setFs(fs-3)};
+document.getElementById("clr").onclick=clearAll;
+(function tick(){var dd=new Date();clock.textContent=p2(dd.getHours())+":"+p2(dd.getMinutes());setTimeout(tick,5000)})();
+setInterval(function(){if(K){K.os_tick();draw();}},1000);
+bootKern().then(function(){draw();conn();});
+</script></body></html>

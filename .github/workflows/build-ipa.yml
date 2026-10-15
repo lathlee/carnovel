@@ -15,6 +15,11 @@ name: Build unsigned IPA
 on:
   push:
     branches: [ main ]
+    # CarNotify 是自己的 App，跟 CarNovel 共用一个仓库。
+    # 只动 CarNotify 的提交不要去跑 CarNovel 的编译，省 macOS runner 额度。
+    paths-ignore:
+      - 'CarNotify/**'
+      - '.github/workflows/carnotify.yml'
   workflow_dispatch:
 
 permissions:
