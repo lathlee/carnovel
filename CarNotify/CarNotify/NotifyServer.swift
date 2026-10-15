@@ -61,6 +61,15 @@ final class NotifyServer: ObservableObject {
         let headers: [String: String]
     }
 
+    /// 解析请求头的结果。needMore 和 malformed 必须分开：
+    /// 前者是正常的 TCP 半包，等下一批；后者是对方发的东西根本不像 HTTP，
+    /// 那还留着连接就是浪费，回个 400 赶紧关掉。
+    private enum ParseOutcome {
+        case needMore
+        case parsed
+        case malformed
+    }
+
     private final class Client {
         let connection: NWConnection
         var phase: Phase = .headers
@@ -212,9 +221,17 @@ final class NotifyServer: ObservableObject {
 
             case .headers:
                 if client.buffer.count > 64 * 1024 { self.drop(key); return }
-                if self.tryParseHeaders(client), client.body.count >= client.expectedBody {
-                    self.finish(key: key, client: client)
+                switch self.tryParseHeaders(client) {
+                case .malformed:
+                    self.rejectAndDrop(key)
                     return
+                case .parsed:
+                    if client.body.count >= client.expectedBody {
+                        self.finish(key: key, client: client)
+                        return
+                    }
+                case .needMore:
+                    break
                 }
 
             case .body:
@@ -230,20 +247,19 @@ final class NotifyServer: ObservableObject {
     }
 
     /// 头齐了就把 method/path/headers 抽出来，剩下的字节当作 body 的开头。
-    /// 返回 true = 头已解析完（此时 phase 一定已经推进到 .body）。
-    private func tryParseHeaders(_ client: Client) -> Bool {
-        guard let range = client.buffer.range(of: Data("\r\n\r\n".utf8)) else { return false }
+    private func tryParseHeaders(_ client: Client) -> ParseOutcome {
+        guard let range = client.buffer.range(of: Data("\r\n\r\n".utf8)) else { return .needMore }
 
         let head = client.buffer.subdata(in: client.buffer.startIndex..<range.lowerBound)
         let leftover = client.buffer.subdata(in: range.upperBound..<client.buffer.endIndex)
         client.buffer = Data()
 
-        guard let text = String(data: head, encoding: .utf8) else { return false }
+        guard let text = String(data: head, encoding: .utf8) else { return .malformed }
         let lines = text.components(separatedBy: "\r\n")
-        guard let requestLine = lines.first else { return false }
+        guard let requestLine = lines.first else { return .malformed }
 
         let parts = requestLine.split(separator: " ", omittingEmptySubsequences: true)
-        guard parts.count >= 2 else { return false }
+        guard parts.count >= 2 else { return .malformed }
 
         let method = String(parts[0]).uppercased()
         let target = String(parts[1])
@@ -261,7 +277,12 @@ final class NotifyServer: ObservableObject {
         client.expectedBody = Int(headers["content-length"] ?? "0") ?? 0
         client.body = leftover
         client.phase = .body
-        return true
+        return .parsed
+    }
+
+    private func rejectAndDrop(_ key: ObjectIdentifier) {
+        sendText(key: key, code: 400,
+                 contentType: "text/plain; charset=utf-8", body: "Bad Request")
     }
 
     /// 请求收全了，派发并且把连接状态复位

@@ -51,6 +51,15 @@ jobs:
           ls -d CarNotify.xcodeproj
           xcodebuild -project CarNotify.xcodeproj -list
 
+      - name: 跑协议自检（不依赖 Xcode，纯 Python）
+        working-directory: CarNotify
+        # 这两个脚本把 NotifyServer.swift 的逻辑逐行搬到 Python，
+        # 用真实字节流喂它：半包、粘包、mask、Content-Length 分片、握手 Accept。
+        # 编译只能证明语法对，证明不了"帧拆开来还对"。
+        run: |
+          python3 test_wsframe.py
+          python3 test_http_state.py
+
       - name: 编译（不签名）
         id: build
         working-directory: CarNotify
