@@ -55,18 +55,29 @@
     </array>
 
     <!--
-        ★ 核心：后台保活。
+        ★ 核心：后台保活
 
-        audio   —— 播放一段无声的音频，让 App 在息屏/后台时不挂起。
-                   这是最成熟的保活手段，代价是"正在播放"会有显示。
-        network —— 更好的选择：App 作为 TCP 服务器持续监听时，
-                   iOS 允许它留在后台。Long-lived socket 是官方认可的理由之一。
-                   两个都声明，实际由代码按需启用。
+        audio 是**唯一**真正起作用的那一条：
+        循环播一段数字静音，让进程在息屏 / 切后台之后不被挂起，
+        NWListener 才有机会继续接住快捷指令 POST 过来的通知。
+
+        这里曾经还写过 network —— 那是错的。查 Apple 的 UIBackgroundModes 文档，
+        合法取值只有：
+            audio / bluetooth-central / bluetooth-peripheral / external-accessory /
+            fetch / location / nearby-interaction / network-authentication /
+            newsstand-content / processing / push-to-talk / remote-notification /
+            screen-capture / voip
+        里面**没有 network**（只有 network-authentication，那是给 Captive Portal 用的）。
+        侧载时装个无效值不会报错，但它是错的，删掉。
+
+        诚实说明：静音音频保活在 App Store 的审核口径下算违规
+        （音频后台模式要求真的在播有声内容）。本 App 只侧载、不上架，所以能用；
+        哪天要上架，这条路得换（例如 bluetooth-central + 真的 BLE 外设）。
+        第二阶段做微信（BLE ANCS）时才需要再加 bluetooth-central。
     -->
     <key>UIBackgroundModes</key>
     <array>
         <string>audio</string>
-        <string>network</string>
     </array>
 
     <!-- 文件共享：方便把改好的 index.html 拖进去，不用重新编译 -->

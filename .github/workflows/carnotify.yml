@@ -57,8 +57,11 @@ jobs:
         # 用真实字节流喂它：半包、粘包、mask、Content-Length 分片、握手 Accept。
         # 编译只能证明语法对，证明不了"帧拆开来还对"。
         run: |
-          python3 test_wsframe.py
-          python3 test_http_state.py
+          set -o pipefail
+          {
+            python3 test_wsframe.py
+            python3 test_http_state.py
+          } 2>&1 | tee "$RUNNER_TEMP/tests.log"
 
       - name: 编译（不签名）
         id: build
@@ -150,6 +153,16 @@ jobs:
             echo
             echo '```'
             cat ci-logs/errors.txt
+            echo '```'
+            echo
+            echo "## 协议自检（WsFrame / 状态机）"
+            echo
+            echo '```'
+            if [ -f "$RUNNER_TEMP/tests.log" ]; then
+              cat "$RUNNER_TEMP/tests.log"
+            else
+              echo "(自检步骤没跑起来)"
+            fi
             echo '```'
             echo
             echo "## 完整日志（末尾 2500 行）"

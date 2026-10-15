@@ -113,7 +113,25 @@ WebSocket 上跑的三条消息：
 
 - **微信**拿不到。iOS 没有读第三方通知的 API，也没有对应触发器。
   短信 / 邮件能拿到是因为快捷指令有这两个通信触发器。微信只剩 BLE ANCS 一条路（第二阶段）。
-- 保活靠静音音频。控制中心 / CarPlay 的「正在播放」里会出现 CarNotify，
-  用 `.mixWithOthers` 让车机上的音乐照常放，不抢播放权。
+- **保活靠静音音频，这是本 App 最"脏"的一处**：
+  - `UIBackgroundModes` 只声明了 `audio`。曾经还写了 `network` —— 那是错的，
+    Apple 的合法取值里没有 `network`（只有 `network-authentication`，给 Captive Portal 用的）。
+  - App Store 的审核口径下，用静音音频换后台执行权是违规的。
+    本 App 只侧载、不上架，所以可用；要上架就得换方案。
+  - 代价：控制中心 / CarPlay 的「正在播放」里会出现 CarNotify。
+    用 `.mixWithOthers` 让车机上的音乐照常放，不抢播放权。
 - 端口默认固定 8081（快捷指令里存的地址就是它）。8081 被占才会退到随机端口，
   那时页面地址要重新看 App 里显示的。
+
+## 自检
+
+`NotifyServer.swift` 里两处最容易错、而编译查不出来的地方，都有脚本盯着：
+
+```bash
+python3 test_wsframe.py      # 95 项：帧编解码
+python3 test_http_state.py   # 55 项：三态机 / 路由 / 握手
+```
+
+做法是把 Swift 那段逻辑逐行搬到 Python，喂真实字节流，再跟
+`aptv-notify/notify_server.py`（已在真机 + 车机上跑通的那版）交叉验证。
+CI 里每次构建前都会跑，失败就直接不编译。
