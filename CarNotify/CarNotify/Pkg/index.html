@@ -1,10 +1,10 @@
 <!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>通知中心</title>
 <style>
 :root{--fs:20px}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font:16px/1.5 ui-monospace,Menlo,-apple-system,"PingFang SC",monospace;background:#070b07;color:#ffffff;padding:16px;min-height:100vh}
+body{font:16px/1.5 ui-monospace,Menlo,-apple-system,"PingFang SC",monospace;background:#070b07;color:#ffffff;padding:16px;min-height:100vh;touch-action:manipulation;-webkit-text-size-adjust:100%}
 .top{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
 .dot{width:10px;height:10px;border-radius:50%;background:#444;flex:none}
 .dot.on{background:#3fb950}
@@ -39,6 +39,10 @@ h1{font-size:20px;font-weight:600;letter-spacing:1px}
 .status{text-align:center;font-size:calc(var(--fs) * 0.7);margin-top:10px;color:#6f8f6f}
 .status.on{color:#3fb950}
 .empty{color:#3f5a3f;font-size:calc(var(--fs)*0.8);text-align:center;padding:10px 0}
+/* 新消息落入顶部动画：从上方滑入并轻微放大归位，旧消息被自然挤下 */
+.card.enter{animation:dropIn .42s cubic-bezier(.22,.61,.36,1) both}
+@keyframes dropIn{from{opacity:0;transform:translateY(-22px) scale(.98)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.card.enter{animation:none}}
 </style></head><body>
 <div class="top">
   <span class="dot" id="d"></span><h1>通知中心</h1><span class="cnt" id="n">0 条</span>
@@ -75,21 +79,37 @@ function catOf(app){var a=(app||"").toLowerCase();
   if(a.indexOf("微信")>=0||a.indexOf("wechat")>=0)return "wx";
   if(a.indexOf("短信")>=0||a.indexOf("信息")>=0||a.indexOf("sms")>=0||a.indexOf("messages")>=0)return "sms";
   return "other";}
-function add(m){m.seq=++SEQ;plain.push(m);draw();}
+function add(m){m.seq=++SEQ;plain.push(m);draw(true);}
 function cardHTML(m){
-  return '<div class="card"><div class="h">'
+  return '<div class="card" data-seq="'+m.seq+'"><div class="h">'
     +(m.app?'<span class="app">'+esc(m.app)+'</span>':"")
     +'<span class="t">'+esc(m.title)+'</span></div><div class="b">'+esc(m.body)+'</div>'
     +'<div class="time">'+fmt(m.ts)+'</div></div>';
 }
-function draw(){
+var seen={};
+function draw(animate){
   // 纯按到达顺序（seq 倒序）：新的永远在最上面
   var arr=plain.slice().sort(function(a,b){return (b.seq||0)-(a.seq||0);});
   var wx=[],sms=[];
   arr.forEach(function(m){var c=catOf(m.app);if(c==="wx")wx.push(m);else if(c==="sms")sms.push(m);});
   n.textContent=(wx.length+sms.length)+" 条";
-  colWX.innerHTML=wx.length?wx.map(cardHTML).join(""):'<div class="empty">暂无</div>';
-  colSMS.innerHTML=sms.length?sms.map(cardHTML).join(""):'<div class="empty">暂无</div>';
+  colWX.innerHTML=wx.map(cardHTML).join("");
+  colSMS.innerHTML=sms.map(cardHTML).join("");
+  if(animate){
+    // 仅让本列最新一条（顶部）播放落入动画，旧消息被自然挤下
+    [colWX,colSMS].forEach(function(col){
+      var first=col.firstElementChild;
+      if(first&&first.dataset&&first.dataset.seq&&!seen[first.dataset.seq]){
+        seen[first.dataset.seq]=1;first.classList.add("enter");
+      }
+    });
+  }else{
+    // 批量重绘（清屏 / 历史回放 / 首屏）不播动画，但要把已有 seq 记进 seen
+    [colWX,colSMS].forEach(function(col){
+      var c=col.firstElementChild;
+      while(c){if(c.dataset&&c.dataset.seq)seen[c.dataset.seq]=1;c=c.nextElementSibling;}
+    });
+  }
 }
 function clearAll(){
   plain=[];draw();
