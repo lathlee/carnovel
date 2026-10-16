@@ -38,13 +38,14 @@ h1{font-size:20px;font-weight:600;letter-spacing:1px}
 .time{font-size:calc(var(--fs) * 0.62);color:#6f8f6f;margin-top:6px}
 .status{text-align:center;font-size:calc(var(--fs) * 0.7);margin-top:10px;color:#6f8f6f}
 .status.on{color:#3fb950}
+.empty{color:#3f5a3f;font-size:calc(var(--fs)*0.8);text-align:center;padding:10px 0}
 </style></head><body>
 <div class="top">
   <span class="dot" id="d"></span><h1>通知中心</h1><span class="cnt" id="n">0 条</span>
   <span class="tools">
     <button id="minus">A-</button><button id="plus">A+</button><button id="clr" class="clear">清屏</button>
   </span>
-  <div class="kern" id="kern"></div>
+  <div class="kern" id="kern">本机实时 · 微信在左 · 短信在右</div>
 </div>
 <div class="clockbar"><span class="clock" id="clock">--:--</span></div>
 <div class="cols">
@@ -53,12 +54,11 @@ h1{font-size:20px;font-weight:600;letter-spacing:1px}
 </div>
 <div class="status" id="status"></div>
 <script>
-var NONE=-1,TTL=900,SCRATCH=32768;
+var SEQ=0,plain=[];
 var clock=document.getElementById("clock"),status=document.getElementById("status"),
     colWX=document.getElementById("colWX"),colSMS=document.getElementById("colSMS"),
     d=document.getElementById("d"),n=document.getElementById("n"),
     kern=document.getElementById("kern");
-var K=null,kview=null,SLOT=[],H2S={},plain=[],SEQ=0,ws=null;
 var FS_MIN=14,FS_MAX=40,fs=parseInt(localStorage.getItem("fs"))||20;
 function setFs(v){fs=Math.max(FS_MIN,Math.min(FS_MAX,v));
   document.documentElement.style.setProperty("--fs",fs+"px");
@@ -69,38 +69,13 @@ function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;
 function p2(x){return x<10?"0"+x:""+x}
 function fmt(ts){var d=new Date(ts*1000);return p2(d.getHours())+":"+p2(d.getMinutes())+":"+p2(d.getSeconds())}
 function h12(d){var h=d.getHours()%12;if(h===0)h=12;return p2(h);}
-function prioOf(app){var a=(app||"").toLowerCase();
-  if(a.indexOf("电话")>=0||a.indexOf("来电")>=0)return 0;
-  if(a.indexOf("短信")>=0||a.indexOf("信息")>=0)return 2;
-  if(a.indexOf("微信")>=0)return 3;
-  if(a.indexOf("邮件")>=0||a.indexOf("mail")>=0)return 5;
-  if(a.indexOf("测试")>=0)return 7;
-  return 6;}
-// 分列：微信 → 左，短信 → 右，其余（来电/邮件/App自检等）不显示
+// 分列：微信 → 左，短信 → 右，其余不显示。
+// 约定（用户已在快捷指令里分好）：微信消息 app="微信"，其他想显示的 app="短信"。
 function catOf(app){var a=(app||"").toLowerCase();
   if(a.indexOf("微信")>=0||a.indexOf("wechat")>=0)return "wx";
   if(a.indexOf("短信")>=0||a.indexOf("信息")>=0||a.indexOf("sms")>=0||a.indexOf("messages")>=0)return "sms";
   return "other";}
-function bootKern(){
-  return fetch("rtos.wasm").then(function(r){return r.arrayBuffer()})
-    .then(function(b){return WebAssembly.instantiate(b,{})})
-    .then(function(m){K=m.instance.exports;K.os_init();
-      kview=new Uint32Array(K.memory.buffer,SCRATCH,65);})
-    .catch(function(){K=null;});
-}
-function kernelOrder(){
-  if(!K)return plain;
-  K.os_ready_list(SCRATCH);
-  var c=kview[0],out=[],i;
-  for(i=0;i<c;i++){var h=kview[1+i],s=H2S[h];if(s!==undefined&&SLOT[s])out.push(SLOT[s]);}
-  return out;
-}
-function add(m){
-  m.seq=++SEQ;
-  if(K){var s=SLOT.length;SLOT.push(m);H2S[K.os_post(prioOf(m.app),TTL,s)]=s;}
-  else plain.push(m);
-  draw();
-}
+function add(m){m.seq=++SEQ;plain.push(m);draw();}
 function cardHTML(m){
   return '<div class="card"><div class="h">'
     +(m.app?'<span class="app">'+esc(m.app)+'</span>':"")
@@ -109,42 +84,35 @@ function cardHTML(m){
 }
 function draw(){
   // 纯按到达顺序（seq 倒序）：新的永远在最上面
-  var arr=kernelOrder().sort(function(a,b){return (b.seq||0)-(a.seq||0);});
+  var arr=plain.slice().sort(function(a,b){return (b.seq||0)-(a.seq||0);});
   var wx=[],sms=[];
   arr.forEach(function(m){var c=catOf(m.app);if(c==="wx")wx.push(m);else if(c==="sms")sms.push(m);});
   n.textContent=(wx.length+sms.length)+" 条";
-  colWX.innerHTML=wx.map(cardHTML).join("");
-  colSMS.innerHTML=sms.map(cardHTML).join("");
-  if(K)kern.textContent="内核 tick "+K.os_stats(0)+" · 抢占 "+K.os_stats(3)
-    +" · 过期 "+K.os_stats(2)+" · 提交 "+K.os_stats(1);
-  else kern.textContent="内核未加载，按到达顺序显示";
+  colWX.innerHTML=wx.length?wx.map(cardHTML).join(""):'<div class="empty">暂无</div>';
+  colSMS.innerHTML=sms.length?sms.map(cardHTML).join(""):'<div class="empty">暂无</div>';
 }
 function clearAll(){
-  plain=[];SLOT=[];H2S={};
-  if(K)K.os_clear();
-  draw();
+  plain=[];draw();
   try{fetch("/clear",{method:"POST"})}catch(e){}
 }
 function conn(){
   setStatus("",false);
-  var w=new WebSocket("ws://"+location.host+"/ws");ws=w;
+  var w=new WebSocket("ws://"+location.host+"/ws");
   w.onopen=function(){d.className="dot on";setStatus("已连接",true)};
-  w.onmessage=function(ev){if(w!==ws)return;try{var j=JSON.parse(ev.data);
+  w.onmessage=function(ev){try{var j=JSON.parse(ev.data);
     if(j.type==="notify")add(j.item);
     else if(j.type==="clear")clearLocal();
     else if(j.type==="hello"){clearLocal();(j.items||[]).forEach(add);}
   }catch(x){}};
   w.onerror=function(){try{w.close()}catch(e){}};
-  w.onclose=function(){if(w!==ws)return;ws=null;
-    d.className="dot";setStatus("未连接，3 秒后重连",false);setTimeout(conn,3000)};
+  w.onclose=function(){d.className="dot";setStatus("未连接，3 秒后重连",false);setTimeout(conn,3000)};
 }
-function clearLocal(){plain=[];SLOT=[];H2S={};if(K)K.os_clear();draw();}
+function clearLocal(){plain=[];draw();}
 document.getElementById("plus").onclick=function(){setFs(fs+3)};
 document.getElementById("minus").onclick=function(){setFs(fs-3)};
 document.getElementById("clr").onclick=clearAll;
-// 时钟：12 小时制 HH:MM，每秒校正一次（只在整分翻面时变化）
+// 时钟：12 小时制 HH:MM，每秒校正一次
 (function tick(){var dd=new Date();clock.textContent=h12(dd)+":"+p2(dd.getMinutes());setTimeout(tick,1000)})();
-// 内核滴答（推进 TTL 记账），但不再每秒重绘整页，避免列滚动跳动/闪烁
-setInterval(function(){if(K)K.os_tick();},1000);
-bootKern().then(function(){draw();conn();});
+// 直接基于到达顺序渲染，不依赖 wasm 内核：保证消息一定显示，也不受车机浏览器 wasm 支持差异影响。
+draw();conn();
 </script></body></html>
