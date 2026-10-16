@@ -455,14 +455,12 @@ final class NotifyServer: ObservableObject {
     // MARK: - 静态资源
 
     private func serveResource(key: ObjectIdentifier, name: String, ext: String) {
-        // 优先 Documents —— 用文件 App 拖一个同名文件进去就能热替换，不用重新编译
-        let documents = FileManager.default
-            .urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("\(name).\(ext)")
-        let bundled = Bundle.main.url(forResource: name, withExtension: ext)
-        let url = FileManager.default.fileExists(atPath: documents.path) ? documents : bundled
-
-        guard let url, let data = try? Data(contentsOf: url) else {
+        // 只认 bundle 内资源：页面随 IPA 一起发布，版本由 project.yml 单一来源管理。
+        // 刻意不再优先读 Documents 同名文件 —— 开发期热替换留下的旧页面（带 wasm 内核）
+        // 会盖住新 bundle，造成"有声音无消息"这类难查故障。去掉这个覆盖后，
+        // 哪怕文件共享里残留旧 index.html 也不会再被加载，bundle 永远是唯一真相。
+        guard let url = Bundle.main.url(forResource: name, withExtension: ext),
+              let data = try? Data(contentsOf: url) else {
             sendText(key: key, code: 404,
                      contentType: "text/plain; charset=utf-8", body: "missing \(name).\(ext)")
             return
