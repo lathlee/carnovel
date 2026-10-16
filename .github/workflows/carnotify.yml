@@ -149,6 +149,28 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: 准备 GitHub Pages 内容（SideStore 主源）
+        if: steps.build.outcome == 'success'
+        run: |
+          set -e
+          mkdir -p pages
+          cp "$RUNNER_TEMP/CarNotify-$VER-unsigned.ipa" "pages/CarNotify-$VER-unsigned.ipa"
+          cp "CarNotify/CarNotify/Assets.xcassets/AppIcon.appiconset/icon-1024.png" "pages/icon.png"
+          IPA_SIZE=$(stat -f%z "$RUNNER_TEMP/CarNotify-$VER-unsigned.ipa")
+          PAGES_BASE="https://lathlee.github.io/carnovel"
+          IPA_SIZE="$IPA_SIZE" bash scripts/gen_sources.sh "$VER" "$PAGES_BASE" "com.lath.carnotify.sidestore" "pages/source.json"
+          echo "--- pages 目录 ---"
+          ls -l pages
+
+      - name: 部署到 GitHub Pages（gh-pages）
+        if: steps.build.outcome == 'success'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./pages
+          commit_message: "ci: 更新 SideStore 源 CarNotify ${{ env.VER }}"
+
       - name: 把日志与产物推到 carnotify-build 分支
         if: always()
         run: |
@@ -205,6 +227,13 @@ jobs:
             cp "$RUNNER_TEMP/CarNotify-$VER-unsigned.ipa" "ci-logs/CarNotify-$VER-unsigned.ipa"
             echo "已附带 CarNotify-$VER-unsigned.ipa ($(du -h "ci-logs/CarNotify-$VER-unsigned.ipa" | cut -f1))"
           fi
+
+          # 图标 + raw 备选源（不开 GitHub Pages 也能用 SideStore 添加源）
+          cp "CarNotify/CarNotify/Assets.xcassets/AppIcon.appiconset/icon-1024.png" "ci-logs/icon.png"
+          IPA_SIZE=$(stat -f%z "ci-logs/CarNotify-$VER-unsigned.ipa" 2>/dev/null || echo 0)
+          RAW_BASE="https://raw.githubusercontent.com/lathlee/carnovel/carnotify-build/ci-logs"
+          IPA_SIZE="$IPA_SIZE" bash scripts/gen_sources.sh "$VER" "$RAW_BASE" "com.lath.carnotify.sidestore.raw" "ci-logs/source.json"
+          echo "已生成 ci-logs/source.json (raw 备选源)"
 
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
