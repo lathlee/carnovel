@@ -6,20 +6,20 @@
     {
       "name": "CarNotify",
       "bundleIdentifier": "com.lath.carnotify",
-      "version": "1.5",
-      "versionDate": "2026-10-16",
-      "downloadURL": "https://lathlee.github.io/carnovel/CarNotify-1.5-unsigned.ipa",
+      "version": "1.6",
+      "versionDate": "2026-10-19",
+      "downloadURL": "https://lathlee.github.io/carnovel/CarNotify-1.6-unsigned.ipa",
       "localizedDescription": "iPhone 本地通知服务器：在 CarPlay / APTV 浏览器实时显示微信与短信通知，无需安装车机软件。",
       "iconURL": "https://lathlee.github.io/carnovel/icon.png",
       "tintColor": "34C759",
-      "size": 231993,
+      "size": 232738,
       "permissions": []
     }
   ],
   "news": [
     {
-      "title": "CarNotify 1.5",
-      "date": "2026-10-16",
+      "title": "CarNotify 1.6",
+      "date": "2026-10-19",
       "caption": "SideStore 自动更新源已就绪，添加源后可一键安装 / 更新。"
     }
   ]
