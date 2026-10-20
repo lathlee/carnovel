@@ -1,0 +1,53 @@
+# XcodeGen 工程描述 —— GlassNotify
+#
+# 本机是 Windows，没有 Xcode，工程文件用 YAML 描述，由 CI 上的 XcodeGen 生成 .xcodeproj。
+# 本地（有 Mac 时）：brew install xcodegen && xcodegen generate
+
+name: GlassNotify
+
+options:
+  bundleIdPrefix: com.lath
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    # 版本号全局唯一来源 —— CI 工作流读这里决定 IPA 文件名。
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # 侧载不需要 Apple 签名 —— 交给 SideStore / AltStore 用免费 Apple ID 做
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGN_IDENTITY: ""
+
+schemes:
+  GlassNotify:
+    build:
+      targets:
+        GlassNotify: all
+
+targets:
+  GlassNotify:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+
+    # 逐个列出来，不写目录通配。
+    sources:
+      - path: GlassNotify/App
+      - path: GlassNotify/UI
+      - path: GlassNotify/NotifyServer.swift
+      - path: GlassNotify/BackgroundKeepAlive.swift
+      - path: GlassNotify/Assets.xcassets
+
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lath.glassnotify
+        PRODUCT_NAME: GlassNotify
+        INFOPLIST_FILE: GlassNotify/Info.plist
+        GENERATE_INFOPLIST_FILE: "NO"
+        TARGETED_DEVICE_FAMILY: "1"
+        ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
