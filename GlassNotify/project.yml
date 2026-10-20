@@ -41,6 +41,7 @@ targets:
       - path: GlassNotify/NotifyServer.swift
       - path: GlassNotify/BackgroundKeepAlive.swift
       - path: GlassNotify/Assets.xcassets
+        buildPhase: resources     # 让 xcodegen 当成资源而非源码组
 
     settings:
       base:
