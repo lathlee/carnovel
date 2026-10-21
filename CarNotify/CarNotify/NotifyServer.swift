@@ -42,6 +42,12 @@ final class NotifyServer: ObservableObject {
     @Published private(set) var clientCount = 0
     /// 眼镜端 WS 是否在线（Android 端连上后先发 {"type":"hello","from":"glasses"}）
     @Published private(set) var glassesConnected = false
+    /// 眼镜电量百分比（0..100），-1 = 未知/未连接
+    @Published private(set) var glassesBattery: Int = -1
+    /// 眼镜是否在充电
+    @Published private(set) var glassesCharging = false
+    /// 眼镜电量的最后更新时间（用于显示"多久之前"）
+    @Published private(set) var batteryUpdatedAt: Date? = nil
     /// 眼镜端文本框聚焦 -> 请求弹出 iPhone 输入面板（{"type":"ime","show":true}）
     @Published private(set) var imeShow = false
     @Published private(set) var lastError: String = ""
@@ -380,6 +386,12 @@ final class NotifyServer: ObservableObject {
         DispatchQueue.main.async {
             self.clientCount = n
             self.glassesConnected = g
+            if !g {
+                // 眼镜掉线：电量立刻作废，别让界面挂着上一期的旧数字
+                self.glassesBattery = -1
+                self.glassesCharging = false
+                self.batteryUpdatedAt = nil
+            }
         }
     }
 
@@ -458,6 +470,26 @@ final class NotifyServer: ObservableObject {
         case "hello":
             clients[key]?.isGlasses = true
             publishClientCount()
+            // 连上就立刻要一次电量，不用等眼镜的下一个 30s 周期
+            sendFrame(key: key, text: jsonString(["type": "get_battery"]))
+
+        case "battery":
+            // 眼镜电量上报：{"type":"battery","level":87,"charging":false}
+            let level: Int
+            if let n = obj["level"] as? NSNumber { level = n.intValue }
+            else if let s = obj["level"] as? String { level = Int(s) ?? -1 }
+            else { return }
+            let charging: Bool
+            if let b = obj["charging"] as? Bool { charging = b }
+            else if let n = obj["charging"] as? NSNumber { charging = n.boolValue }
+            else { charging = false }
+            guard level >= 0, level <= 100 else { return }
+            DispatchQueue.main.async {
+                self.glassesBattery = level
+                self.glassesCharging = charging
+                self.batteryUpdatedAt = Date()
+            }
+
         case "ime":
             let show = (obj["show"] as? Bool) ?? false
             DispatchQueue.main.async { self.imeShow = show }

@@ -112,7 +112,7 @@ struct StatusView: View {
         }
     }
 
-    /// 眼镜连接状态
+    /// 眼镜连接状态（右侧显示眼镜电量）
     private var linkCard: some View {
         card {
             sectionTitle("眼镜连接")
@@ -123,13 +123,72 @@ struct StatusView: View {
                 Text(server.glassesConnected ? "眼镜已连接" : "眼镜未连接")
                     .font(.system(size: 16, weight: .semibold))
                 Spacer()
+                batteryBadge
             }
             Text("眼镜连 iPhone 个人热点后自动接入（ws://172.20.10.1:\(server.port)/ws）")
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)
                 .padding(.top, 4)
+            if server.glassesBattery >= 0 {
+                Text(batteryFootnote)
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
         }
     }
+
+    // MARK: - 眼镜电量
+
+    /// 电池图标按电量段选，看一眼就知道大概还剩多少
+    private var batteryIcon: String {
+        switch server.glassesBattery {
+        case 76...100: return "battery.100"
+        case 51...75:  return "battery.75"
+        case 26...50:  return "battery.50"
+        case 11...25:  return "battery.25"
+        case 0...10:   return "battery.0"
+        default:       return "battery.0"     // -1：未知
+        }
+    }
+
+    private var batteryColor: Color {
+        switch server.glassesBattery {
+        case 0...15:  return .red
+        case 16...30: return .orange
+        case 31...100: return .green
+        default:      return .gray            // 未连接
+        }
+    }
+
+    private var batteryBadge: some View {
+        HStack(spacing: 6) {
+            if server.glassesCharging {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(.yellow)
+            }
+            Image(systemName: batteryIcon)
+                .font(.system(size: 17))
+            Text(server.glassesBattery >= 0 ? "\(server.glassesBattery)%" : "--")
+                .font(.system(size: 17, weight: .semibold, design: .monospaced))
+        }
+        .foregroundColor(batteryColor)
+    }
+
+    private var batteryFootnote: String {
+        var s = "眼镜电量 \(server.glassesBattery)%"
+        if server.glassesCharging { s += " · 充电中" }
+        if let d = server.batteryUpdatedAt {
+            s += " · " + Self.timeFormatter.string(from: d) + " 更新"
+        }
+        return s
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
 
     /// 当前音频输出通道：iPhone 本机 / 眼镜（蓝牙）
     private var audioCard: some View {
