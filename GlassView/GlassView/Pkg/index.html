@@ -1,0 +1,163 @@
+<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Glass-view</title>
+<style>
+:root{--fs:16px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:16px/1.4 ui-monospace,Menlo,-apple-system,"PingFang SC",monospace;background:#070b07;color:#ffffff;padding:10px;height:100vh;overflow:hidden;touch-action:manipulation;-webkit-text-size-adjust:100%}
+/* 顶部：仅保留连接状态 + 右上角三个点（清屏/字号隐藏其中） */
+.top{display:flex;align-items:center;justify-content:space-between;min-height:30px;margin-bottom:2px}
+.dot{width:8px;height:8px;border-radius:50%;background:#444;flex:none}
+.dot.on{background:#3fb950}
+.menuwrap{position:relative}
+.menubtn{font-size:20px;line-height:1;color:#9aa89a;background:none;border:none;padding:2px 8px;cursor:pointer}
+.menu{position:absolute;right:0;top:30px;display:none;flex-direction:column;gap:6px;
+  background:#0d140d;border:1px solid #2a4a30;border-radius:8px;padding:8px;z-index:20;min-width:78px}
+.menu.show{display:flex}
+.menu button{min-width:64px;padding:9px 10px;font-size:15px;font-weight:600;
+  border:1px solid #2a4a30;background:#0d140d;color:#7ee787;border-radius:7px}
+.menu button.clear{color:#ff9d9d;border-color:#4a2a2a;background:#140d0d}
+/* 顶部时钟：有消息时上移靠顶；无消息时放大并四向居中；两者间 0.5s 过渡（缩小+上移），清屏时反向 */
+.clockbar{display:flex;align-items:center;justify-content:center;margin:0 0 2px;padding:2px 0;
+  min-height:calc(var(--fs)*2.8);transition:min-height .5s ease,margin .5s ease}
+.clock{color:#ffffff;
+  font-family:ui-rounded,"SF Pro Rounded",-apple-system,"Hiragino Sans","PingFang SC",sans-serif;
+  font-weight:800;font-size:calc(var(--fs)*3);line-height:1.05;letter-spacing:4px;transition:font-size .5s ease}
+body.empty .clockbar{min-height:calc(var(--fs)*20);margin:0}
+body.empty .clock{font-size:calc(var(--fs)*9)}
+/* 两列标识：高度减半、绿框黑底绿字 / 蓝框黑底蓝字、括号内消息条数；无消息的列隐藏 */
+.cols-head{display:flex;gap:10px;margin:2px 0 8px}
+.tag{flex:1;text-align:center;font-size:calc(var(--fs)*0.72);font-weight:700;
+  padding:3px 6px;border-radius:6px;letter-spacing:2px;line-height:1.1}
+.tag.wx{color:#3fb950;background:#000;border:2px solid #3fb950}
+.tag.sms{color:#388bfd;background:#000;border:2px solid #388bfd}
+.tag .cnt{font-weight:600;opacity:.9}
+.tag.hide{display:none}
+/* 左右两列：无消息的列整体隐藏 → 另一列 flex:1 占满整行 */
+.cols{display:flex;gap:10px;align-items:flex-start}
+.col{flex:1;min-width:0}
+.col.hide{display:none}
+/* 消息卡片：高度收小 1/3、行距紧凑、上下间距收小 2/3、边框加粗、时间置右下角 */
+.card{position:relative;background:#121a12;border:2px solid #22361f;border-left:4px solid #2ea043;border-radius:8px;
+  padding:9px 11px 22px;margin-bottom:11px}
+.col.sms .card{border-left-color:#388bfd}
+.h{display:flex;gap:7px;align-items:baseline;margin-bottom:3px;flex-wrap:wrap}
+.app{font-size:calc(var(--fs)*0.6);color:#070b07;background:#2ea043;border-radius:4px;padding:1px 7px;font-weight:700}
+.col.sms .app{background:#388bfd}
+.t{font-size:calc(var(--fs)*1.05);font-weight:600;color:#ffffff}
+.b{font-size:var(--fs);color:#ffffff;word-break:break-word;line-height:1.3;white-space:pre-wrap}
+.time{position:absolute;right:11px;bottom:6px;font-size:calc(var(--fs)*0.6);color:#6f8f6f;margin-top:0;text-align:right}
+/* 新消息落入顶部动画：从上方滑入并轻微放大归位，旧消息被自然挤下 */
+.card.enter{animation:dropIn .42s cubic-bezier(.22,.61,.36,1) both}
+@keyframes dropIn{from{opacity:0;transform:translateY(-18px) scale(.98)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.card.enter{animation:none}}
+</style></head><body>
+<div class="top">
+  <span class="dot" id="d"></span>
+  <span class="menuwrap">
+    <button class="menubtn" id="menuBtn">⋮</button>
+    <div class="menu" id="menu">
+      <button id="minus">A-</button>
+      <button id="plus">A+</button>
+      <button id="clr" class="clear">清屏</button>
+    </div>
+  </span>
+</div>
+<div class="clockbar"><span class="clock" id="clock">--:--</span></div>
+<div class="cols-head">
+  <div class="tag wx" id="tagWX">微信<span class="cnt" id="cntWX"></span></div>
+  <div class="tag sms" id="tagSMS">短信<span class="cnt" id="cntSMS"></span></div>
+</div>
+<div class="cols">
+  <div class="col wx" id="colW"><div id="colWX"></div></div>
+  <div class="col sms" id="colS"><div id="colSMS"></div></div>
+</div>
+<script>
+var SEQ=0,plain=[],seen={};
+var clock=document.getElementById("clock"),
+    colWX=document.getElementById("colWX"),colSMS=document.getElementById("colSMS"),
+    d=document.getElementById("d"),
+    tagWX=document.getElementById("tagWX"),tagSMS=document.getElementById("tagSMS"),
+    cntWX=document.getElementById("cntWX"),cntSMS=document.getElementById("cntSMS"),
+    colW=document.getElementById("colW"),colS=document.getElementById("colS");
+var FS_MIN=12,FS_MAX=40,fs=parseInt(localStorage.getItem("fs"))||16;
+function setFs(v){fs=Math.max(FS_MIN,Math.min(FS_MAX,v));
+  document.documentElement.style.setProperty("--fs",fs+"px");
+  try{localStorage.setItem("fs",fs)}catch(e){}}
+setFs(fs);
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function p2(x){return x<10?"0"+x:""+x}
+function fmt(ts){var d=new Date(ts*1000);return p2(d.getHours())+":"+p2(d.getMinutes())+":"+p2(d.getSeconds())}
+function h12(d){var h=d.getHours()%12;if(h===0)h=12;return p2(h);}
+// 分列：微信 → 左，短信 → 右，其余不显示。
+// 约定（用户已在快捷指令里分好）：微信消息 app="微信"，其他想显示的 app="短信"。
+function catOf(app){var a=(app||"").toLowerCase();
+  if(a.indexOf("微信")>=0||a.indexOf("wechat")>=0)return "wx";
+  if(a.indexOf("短信")>=0||a.indexOf("信息")>=0||a.indexOf("sms")>=0||a.indexOf("messages")>=0)return "sms";
+  return "other";}
+function add(m){m.seq=++SEQ;plain.push(m);draw(true);}
+function cardHTML(m){
+  return '<div class="card" data-seq="'+m.seq+'"><div class="h">'
+    +(m.app?'<span class="app">'+esc(m.app)+'</span>':"")
+    +'<span class="t">'+esc(m.title)+'</span></div><div class="b">'+esc(m.body)+'</div>'
+    +'<div class="time">'+fmt(m.ts)+'</div></div>';
+}
+function draw(animate){
+  // 纯按到达顺序（seq 倒序）：新的永远在最上面
+  var arr=plain.slice().sort(function(a,b){return (b.seq||0)-(a.seq||0);});
+  var wx=[],sms=[];
+  arr.forEach(function(m){var c=catOf(m.app);if(c==="wx")wx.push(m);else if(c==="sms")sms.push(m);});
+  colWX.innerHTML=wx.map(cardHTML).join("");
+  colSMS.innerHTML=sms.map(cardHTML).join("");
+  // 标识右侧括号显示消息条数；该列无消息时连同标识、板块一起隐藏（板块单独出现 / 占满整行）
+  cntWX.textContent=wx.length?("("+wx.length+")"):"";
+  cntSMS.textContent=sms.length?("("+sms.length+")"):"";
+  tagWX.classList.toggle("hide",wx.length===0);
+  tagSMS.classList.toggle("hide",sms.length===0);
+  colW.classList.toggle("hide",wx.length===0);
+  colS.classList.toggle("hide",sms.length===0);
+  // 全部无消息 → 进入空状态：大时钟四向居中
+  document.body.classList.toggle("empty",(wx.length+sms.length)===0);
+  if(animate){
+    // 仅让本列最新一条（顶部）播放落入动画，旧消息被自然挤下；同时触发大→小过渡
+    [colWX,colSMS].forEach(function(col){
+      var first=col.firstElementChild;
+      if(first&&first.dataset&&first.dataset.seq&&!seen[first.dataset.seq]){
+        seen[first.dataset.seq]=1;first.classList.add("enter");
+      }
+    });
+  }else{
+    // 批量重绘（清屏 / 历史回放 / 首屏）不播动画，但要把已有 seq 记进 seen
+    [colWX,colSMS].forEach(function(col){
+      var c=col.firstElementChild;
+      while(c){if(c.dataset&&c.dataset.seq)seen[c.dataset.seq]=1;c=c.nextElementSibling;}
+    });
+  }
+}
+function clearAll(){plain=[];draw();try{fetch("/clear",{method:"POST"})}catch(e){}}
+function conn(){
+  var w=new WebSocket("ws://"+location.host+"/ws");
+  w.onopen=function(){d.className="dot on";};
+  w.onmessage=function(ev){try{var j=JSON.parse(ev.data);
+    if(j.type==="notify")add(j.item);
+    else if(j.type==="clear")clearLocal();
+    else if(j.type==="hello"){clearLocal();(j.items||[]).forEach(add);}
+  }catch(x){}};
+  w.onerror=function(){try{w.close()}catch(e){}};
+  w.onclose=function(){d.className="dot";setTimeout(conn,3000);};
+}
+function clearLocal(){plain=[];draw();}
+// 三个点菜单：点击展开，空闲 4 秒自动隐藏，点外部也隐藏
+var menu=document.getElementById("menu"),menuBtn=document.getElementById("menuBtn"),idle;
+function showMenu(){menu.classList.add("show");clearTimeout(idle);idle=setTimeout(hideMenu,4000);}
+function hideMenu(){menu.classList.remove("show");}
+menuBtn.onclick=function(e){e.stopPropagation();menu.classList.contains("show")?hideMenu():showMenu();};
+document.addEventListener("click",function(e){if(!menu.contains(e.target)&&e.target!==menuBtn)hideMenu();});
+document.getElementById("minus").onclick=function(){setFs(fs-2);showMenu();};
+document.getElementById("plus").onclick=function(){setFs(fs+2);showMenu();};
+document.getElementById("clr").onclick=function(){clearAll();hideMenu();};
+// 时钟：12 小时制 HH:MM，每秒校正一次
+(function tick(){var dd=new Date();clock.textContent=h12(dd)+":"+p2(dd.getMinutes());setTimeout(tick,1000)})();
+// 直接基于到达顺序渲染，不依赖 wasm 内核：保证消息一定显示。
+draw();conn();
+</script></body></html>

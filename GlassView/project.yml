@@ -1,0 +1,99 @@
+# XcodeGen 工程描述 —— GlassView
+#
+# 本机是 Windows，没有 Xcode，所以工程文件用 YAML 描述，
+# 由 CI 上的 XcodeGen 生成 .xcodeproj。
+#
+# 本地（有 Mac 时）：brew install xcodegen && xcodegen generate
+
+name: GlassView
+
+options:
+  bundleIdPrefix: com.lath
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    # 版本号全局唯一来源 —— 主 App 和小组件扩展两个 target 都要用，
+    # 放在 target 里的话扩展拿不到，Info.plist 里的版本键会被整个丢掉。
+    # Info.plist 里写的是 $(MARKETING_VERSION) / $(CURRENT_PROJECT_VERSION)。
+    MARKETING_VERSION: "1.8"
+    CURRENT_PROJECT_VERSION: "8"
+    # 侧载不需要 Apple 签名 —— 签名交给 SideStore / AltStore 用免费 Apple ID 做
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGN_IDENTITY: ""
+
+schemes:
+  GlassView:
+    build:
+      targets:
+        GlassView: all
+
+targets:
+  GlassView:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+
+    # 逐个列出来，不写目录通配 ——
+    # 这样哪些文件进哪个 build phase 一目了然，不会被 XcodeGen 的自动推断坑到。
+    sources:
+      - path: GlassView/App
+      - path: GlassView/UI
+      - path: GlassView/NotifyServer.swift
+      - path: GlassView/BackgroundKeepAlive.swift
+      # 实时活动数据模型 —— 主 App 与小组件扩展共用一份定义（ActivityKit 规矩）
+      - path: GlassView/Shared
+      # Pkg 里的 index.html + rtos.wasm 显式当资源。
+      # 关键点：必须是 buildPhase: resources（逐个文件加进 Resources 阶段），
+      # 不能用 folder reference —— 那会变成 .app/Pkg/index.html，
+      # 而网页里写的是相对路径 fetch("rtos.wasm")。
+      - path: GlassView/Pkg
+        buildPhase: resources
+      # AppIcon.appiconset 所在的资源目录。XcodeGen 会自动把它编进 Assets.car，
+      # 并在这里显式指定 AppIcon 名称，确保 iPhone 主屏能显示图标。
+      - path: GlassView/Assets.xcassets
+
+    # 小组件扩展：iPhone 主屏 + CarPlay 小组件屏（iOS 26+）共用。
+    # Apple 明说 widget 不要求 App 是 CarPlay App，零 carplay-* 权益，免费签名可用。
+    # XcodeGen 会自动生成 "Embed App Extensions"，把 .appex 塞进 PlugIns/。
+    dependencies:
+      - target: GlassViewWidget
+
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lath.glassview
+        PRODUCT_NAME: GlassView
+        INFOPLIST_FILE: GlassView/Info.plist
+        GENERATE_INFOPLIST_FILE: "NO"
+        TARGETED_DEVICE_FAMILY: "1"
+        ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # 刻意不引入任何 CarPlay 能力 —— 车机屏由 APTV 的浏览器渲染
+
+  # ─────────────────────────────────────────────────────────────
+  # 小组件扩展（WidgetKit）
+  # 数据不落 App Group，直接 HTTP 拉 http://127.0.0.1:8081/latest。
+  # 实时刷新由主 App 在收到推送时调 WidgetCenter.reloadAllTimelines()。
+  # ─────────────────────────────────────────────────────────────
+  GlassViewWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.0"
+
+    sources:
+      - path: GlassViewWidget
+      - path: GlassView/Shared
+
+    settings:
+      base:
+        # 扩展的 bundle id 必须挂在主 App 之下
+        PRODUCT_BUNDLE_IDENTIFIER: com.lath.glassview.widget
+        PRODUCT_NAME: GlassViewWidget
+        INFOPLIST_FILE: GlassViewWidget/Info.plist
+        GENERATE_INFOPLIST_FILE: "NO"
+        TARGETED_DEVICE_FAMILY: "1"
+        ENABLE_USER_SCRIPT_SANDBOXING: "NO"
