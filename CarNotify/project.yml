@@ -19,8 +19,8 @@ settings:
     # 版本号全局唯一来源 —— 主 App 和小组件扩展两个 target 都要用，
     # 放在 target 里的话扩展拿不到，Info.plist 里的版本键会被整个丢掉。
     # Info.plist 里写的是 $(MARKETING_VERSION) / $(CURRENT_PROJECT_VERSION)。
-    MARKETING_VERSION: "1.6"
-    CURRENT_PROJECT_VERSION: "6"
+    MARKETING_VERSION: "1.7"
+    CURRENT_PROJECT_VERSION: "7"
     # 侧载不需要 Apple 签名 —— 签名交给 SideStore / AltStore 用免费 Apple ID 做
     CODE_SIGNING_ALLOWED: "NO"
     CODE_SIGNING_REQUIRED: "NO"
@@ -66,7 +66,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lath.carnotify
-        PRODUCT_NAME: CarNotify
+        PRODUCT_NAME: Glass-view
         INFOPLIST_FILE: CarNotify/Info.plist
         GENERATE_INFOPLIST_FILE: "NO"
         TARGETED_DEVICE_FAMILY: "1"
@@ -92,7 +92,7 @@ targets:
       base:
         # 扩展的 bundle id 必须挂在主 App 之下
         PRODUCT_BUNDLE_IDENTIFIER: com.lath.carnotify.widget
-        PRODUCT_NAME: CarNotifyWidget
+        PRODUCT_NAME: GlassViewWidget
         INFOPLIST_FILE: CarNotifyWidget/Info.plist
         GENERATE_INFOPLIST_FILE: "NO"
         TARGETED_DEVICE_FAMILY: "1"
