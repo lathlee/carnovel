@@ -10,6 +10,7 @@
 import SwiftUI
 import UIKit
 import AVFoundation
+import AVKit
 
 struct ContentView: View {
 
@@ -190,22 +191,49 @@ struct StatusView: View {
         return f
     }()
 
-    /// 当前音频输出通道：iPhone 本机 / 眼镜（蓝牙）
+    /// 当前音频输出通道：iPhone 本机 / 眼镜（AirPlay）
     private var audioCard: some View {
         card {
             sectionTitle("当前音频输出")
             HStack {
                 Image(systemName: routeText.contains("眼镜") ? "eyeglasses" : "iphone")
                     .font(.system(size: 20))
-                    .foregroundColor(.green)
+                    .foregroundColor(routeText.contains("眼镜") ? .green : .orange)
                 Text(routeText)
                     .font(.system(size: 16, weight: .semibold))
                 Spacer()
+                // 系统选路器：这里列出的就是 iOS 当前能发现的全部输出设备，
+                // 眼镜作为 AirPlay 接收端会出现在里面（需与 iPhone 同一网络）。
+                RoutePickerView()
+                    .frame(width: 34, height: 34)
             }
-            Text("在控制中心或蓝牙设置里切换输出设备，这里会跟着变")
+
+            // 把系统当前能看到的输出设备全列出来 —— 眼镜不在列表里时一目了然，
+            // 不用再去设置里翻（用户反馈「没有眼镜可选」时最需要这个信息）。
+            let outs = BackgroundKeepAlive.availableOutputs()
+            if outs.isEmpty {
+                Text("系统未发现任何外部输出设备")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .padding(.top, 6)
+            } else {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("可用输出设备")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    ForEach(outs, id: \.self) { name in
+                        Text("· \(name)")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundColor(name.contains(routeText) ? .green : .secondary)
+                    }
+                }
+                .padding(.top, 6)
+            }
+
+            Text("眼镜通过 WiFi 以 AirPlay 接收端出现：需与 iPhone 连同一网络，点右侧按钮选「Android AirPlay」。")
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)
-                .padding(.top, 4)
+                .padding(.top, 6)
         }
     }
 
@@ -294,21 +322,41 @@ struct StatusView: View {
     }
 }
 
-/// 音频输出通道识别：iPhone 本机 vs 眼镜（蓝牙）
+/// 音频输出通道识别：iPhone 本机 vs 眼镜（AirPlay / 蓝牙）
 enum AudioRoute {
     static func describe() -> String {
         let route = AVAudioSession.sharedInstance().currentRoute
         guard let out = route.outputs.first else { return "无输出" }
         let type = out.portType
+        let name = out.portName
+
+        // AirPlay：眼镜走的就是这条路（portType == .airPlay）
+        if type == .airPlay {
+            return "眼镜（AirPlay · \(name.isEmpty ? "Android AirPlay" : name)）"
+        }
         if type == .builtInSpeaker { return "iPhone 扬声器" }
         if type == .builtInReceiver { return "iPhone 听筒" }
         if type == .bluetoothA2DP || type == .bluetoothHFP || type == .bluetoothLE {
-            let name = out.portName.isEmpty ? "蓝牙" : out.portName
-            return "眼镜（蓝牙 · \(name)）"
+            return "眼镜（蓝牙 · \(name.isEmpty ? "蓝牙" : name)）"
         }
-        if type == .headphones { return "耳机（\(out.portName)）" }
-        return out.portName.isEmpty ? "其他输出" : out.portName
+        if type == .headphones { return "耳机（\(name)）" }
+        return name.isEmpty ? "其他输出" : name
     }
+}
+
+/// 系统 AirPlay/音频选路器（AVRoutePickerView 的 SwiftUI 包装）。
+/// 用系统的 picker 才能列出眼镜这种 AirPlay 接收端 —— 自己画列表做不到。
+struct RoutePickerView: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let v = AVRoutePickerView()
+        v.tintColor = .green
+        v.activeTintColor = .green
+        // 点了直接弹系统选路面板
+        v.prioritizesVideoDevices = false
+        return v
+    }
+
+    func updateUIView(_ uiView: AVRoutePickerView, context: Context) { }
 }
 
 // ═══════════════════════════════════════════════════════════════════

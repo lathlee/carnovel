@@ -79,12 +79,29 @@ final class BackgroundKeepAlive {
         do {
             // .mixWithOthers：不抢车机上正在放的音乐；
             // .duckOthers 不要 —— 那会把别人的音乐压低，很扰人。
-            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            //
+            // .allowAirPlay 必须显式声明：眼镜不是蓝牙设备，而是通过 WiFi 以
+            // AirPlay 接收端身份出现（眼镜端 airplay 引擎注册 _raop._tcp）。
+            // 不给这个 option，iOS 不会把 AirPlay 设备列进输出路由，
+            // 表现就是「音频输出里找不到眼镜」（用户反馈问题 6）。
+            // .allowBluetoothA2DP 一起给，兼容以后眼镜加蓝牙音频 profile 的情况。
+            let opts: AVAudioSession.CategoryOptions = [
+                .mixWithOthers,
+                .allowAirPlay,
+                .allowBluetoothA2DP,
+            ]
+            try session.setCategory(.playback, mode: .default, options: opts)
             try session.setActive(true)
             lastMessage = "音频会话已激活"
         } catch {
             lastMessage = "音频会话失败：\(error.localizedDescription)"
         }
+    }
+
+    /// 当前系统可见的输出设备（供状态页列出，让用户知道眼镜在不在列表里）
+    static func availableOutputs() -> [String] {
+        AVAudioSession.sharedInstance().currentRoute.outputs
+            .map { "\($0.portName) [\($0.portType.rawValue)]" }
     }
 
     private func buildEngine() {
