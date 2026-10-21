@@ -17,7 +17,7 @@
     <string>zh_CN</string>
 
     <key>CFBundleDisplayName</key>
-    <string>CarNotify</string>
+    <string>Glass-view</string>
 
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
