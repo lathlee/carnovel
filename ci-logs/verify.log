@@ -1,0 +1,49 @@
+=== Products 目录树 ===
+/Users/runner/work/_temp/dd/Build/Products
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassViewWidget.appex.dSYM
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassViewWidget.appex.dSYM/Contents
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassViewWidget.swiftmodule
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassViewWidget.swiftmodule/arm64-apple-ios.swiftdoc
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassViewWidget.swiftmodule/Project
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassViewWidget.swiftmodule/arm64-apple-ios.swiftmodule
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassViewWidget.swiftmodule/arm64-apple-ios.abi.json
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassViewWidget.appex
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassViewWidget.appex/Metadata.appintents
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassViewWidget.appex/GlassViewWidget
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassViewWidget.appex/Info.plist
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.swiftmodule
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.swiftmodule/arm64-apple-ios.swiftdoc
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.swiftmodule/Project
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.swiftmodule/arm64-apple-ios.swiftmodule
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.swiftmodule/arm64-apple-ios.abi.json
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.app.dSYM
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.app.dSYM/Contents
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.app
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.app/index.html
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.app/GlassView
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.app/PlugIns
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.app/AppIcon60x60@2x.png
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.app/Assets.car
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.app/rtos.wasm
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.app/Info.plist
+/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.app/PkgInfo
+APP=/Users/runner/work/_temp/dd/Build/Products/Release-iphoneos/GlassView.app
+--- .app 根目录 ---
+total 2144
+-rw-r--r--  1 runner  staff    4614 Oct 21 08:51 AppIcon60x60@2x.png
+-rw-r--r--  1 runner  staff   70216 Oct 21 08:52 Assets.car
+-rwxr-xr-x  1 runner  staff  986016 Oct 21 08:52 GlassView
+-rw-r--r--  1 runner  staff    9722 Oct 21 08:52 index.html
+-rw-r--r--  1 runner  staff    1339 Oct 21 08:52 Info.plist
+-rw-r--r--  1 runner  staff       8 Oct 21 08:52 PkgInfo
+drwxr-xr-x  3 runner  staff      96 Oct 21 08:52 PlugIns
+-rw-r--r--  1 runner  staff    7828 Oct 21 08:52 rtos.wasm
+--- PlugIns ---
+total 0
+drwxr-xr-x  5 runner  staff  160 Oct 21 08:52 GlassViewWidget.appex
+--- Info.plist 关键键 ---
+CFBundleIdentifier = com.lath.glassview
+CFBundleName = GlassView
+CFBundleDisplayName = Glass-view
+CFBundleShortVersionString = 1.9

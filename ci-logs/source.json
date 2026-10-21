@@ -1,0 +1,26 @@
+{
+  "name": "Glass-view",
+  "identifier": "com.lath.glassview.sidestore.raw",
+  "sourceURL": "https://raw.githubusercontent.com/lathlee/carnovel/glassview-build/ci-logs/source.json",
+  "apps": [
+    {
+      "name": "Glass-view",
+      "bundleIdentifier": "com.lath.glassview",
+      "version": "1.9",
+      "versionDate": "2026-10-21",
+      "downloadURL": "https://raw.githubusercontent.com/lathlee/carnovel/glassview-build/ci-logs/GlassView-1.9-unsigned.ipa",
+      "localizedDescription": "iPhone 端 Glass-view：给安卓眼镜实时推通知 + 触控板 + 输入法 + 眼镜电量显示。眼镜连 iPhone 个人热点后自动接入。",
+      "iconURL": "https://raw.githubusercontent.com/lathlee/carnovel/glassview-build/ci-logs/icon.png",
+      "tintColor": "34C759",
+      "size": 340066,
+      "permissions": []
+    }
+  ],
+  "news": [
+    {
+      "title": "Glass-view 1.9",
+      "date": "2026-10-21",
+      "caption": "SideStore 自动更新源已就绪，添加源后可一键安装 / 更新。"
+    }
+  ]
+}
