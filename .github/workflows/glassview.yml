@@ -91,10 +91,25 @@ jobs:
       - name: 校验产物与资源
         if: steps.build.outcome == 'success'
         run: |
+          LOGV="$RUNNER_TEMP/verify.log"
+          {
+            echo "=== Products 目录树 ==="
+            find "$RUNNER_TEMP/dd/Build/Products" -maxdepth 3 | head -60
+            APP=$(find "$RUNNER_TEMP/dd/Build/Products" -maxdepth 3 -name 'GlassView.app' -type d | head -1)
+            echo "APP=$APP"
+            echo "--- .app 根目录 ---"
+            ls -l "$APP"
+            echo "--- PlugIns ---"
+            ls -l "$APP/PlugIns" 2>&1
+            echo "--- Info.plist 关键键 ---"
+            PLIST="$APP/Info.plist"
+            for k in CFBundleIdentifier CFBundleName CFBundleDisplayName CFBundleShortVersionString; do
+              /usr/libexec/PlistBuddy -c "Print :$k" "$PLIST" 2>&1 | sed "s/^/$k = /"
+            done
+          } > "$LOGV" 2>&1
+          cat "$LOGV"
+
           APP=$(find "$RUNNER_TEMP/dd/Build/Products" -maxdepth 3 -name 'GlassView.app' -type d | head -1)
-          echo "APP=$APP"
-          echo "--- .app 根目录 ---"
-          ls -l "$APP" | head -40
           for f in index.html rtos.wasm Assets.car; do
             if [ -f "$APP/$f" ]; then
               echo "OK  $f  $(stat -f%z "$APP/$f") 字节"
@@ -197,6 +212,11 @@ jobs:
           if [ -f "$RUNNER_TEMP/GlassView-$VER-unsigned.ipa" ]; then
             cp "$RUNNER_TEMP/GlassView-$VER-unsigned.ipa" "ci-logs/GlassView-$VER-unsigned.ipa"
             echo "已附带 GlassView-$VER-unsigned.ipa ($(du -h "ci-logs/GlassView-$VER-unsigned.ipa" | cut -f1))"
+          fi
+
+          # 校验步骤的诊断信息（失败时从分支上就能看到细节，不用认证）
+          if [ -f "$RUNNER_TEMP/verify.log" ]; then
+            cp "$RUNNER_TEMP/verify.log" ci-logs/verify.log
           fi
 
           # 图标 + raw 备选源（不开 GitHub Pages 也能用 SideStore 添加源）
