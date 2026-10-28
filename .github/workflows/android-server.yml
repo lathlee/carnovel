@@ -23,13 +23,22 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: 安装 SDK 平台与构建工具
+      - name: 准备 Android SDK（使用 runner 预装）
         run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "platforms;android-34" "build-tools;34.0.0" > /dev/null
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          SDKM=""
+          for p in "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+                   "$ANDROID_HOME/cmdline-tools/bin/sdkmanager" \
+                   "$ANDROID_HOME/tools/bin/sdkmanager"; do
+            if [ -x "$p" ]; then SDKM="$p"; break; fi
+          done
+          echo "sdkmanager=$SDKM"
+          if [ -n "$SDKM" ]; then
+            yes | "$SDKM" --licenses >/dev/null 2>&1 || true
+            "$SDKM" "platforms;android-34" "build-tools;34.0.0" >/dev/null 2>&1 || true
+          fi
+          echo "=== platforms ==="; ls "$ANDROID_HOME/platforms" || true
+          echo "=== build-tools ==="; ls "$ANDROID_HOME/build-tools" || true
 
       - name: Gradle
         uses: gradle/actions/setup-gradle@v3
