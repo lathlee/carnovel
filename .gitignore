@@ -23,6 +23,8 @@ out/
 *.png
 # 但 App 图标 PNG 必须入库，否则 CI 上 actool 找不到图标文件
 !CarNotify/CarNotify/Assets.xcassets/AppIcon.appiconset/*.png
+# Android 服务端图标同样需要入库
+!android/app/src/main/res/mipmap-*/ic_launcher.png
 
 # ── Python ────────────────────────────────────────────────
 __pycache__/
