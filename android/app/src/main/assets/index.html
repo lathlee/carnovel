@@ -89,12 +89,11 @@ function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;
 function p2(x){return x<10?"0"+x:""+x}
 function fmt(ts){var d=new Date(ts*1000);return p2(d.getHours())+":"+p2(d.getMinutes())+":"+p2(d.getSeconds())}
 function h12(d){var h=d.getHours()%12;if(h===0)h=12;return p2(h);}
-// 分列：微信 → 左，短信 → 右，其余不显示。
+// 分列：微信 → 左，其余（短信及其他 App）→ 右，任何消息都不丢弃。
 // 约定（快捷指令里分好）：微信消息 app="微信"，其他想显示的 app="短信"。
 function catOf(app){var a=(app||"").toLowerCase();
   if(a.indexOf("微信")>=0||a.indexOf("wechat")>=0)return "wx";
-  if(a.indexOf("短信")>=0||a.indexOf("信息")>=0||a.indexOf("sms")>=0||a.indexOf("messages")>=0)return "sms";
-  return "other";}
+  return "sms";}
 function cardHTML(m){
   return '<div class="card" data-seq="'+m.seq+'"><div class="h">'
     +(m.app?'<span class="app">'+esc(m.app)+'</span>':"")

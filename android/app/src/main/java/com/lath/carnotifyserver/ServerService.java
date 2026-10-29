@@ -280,9 +280,18 @@ public class ServerService extends Service {
             try {
                 if (raw != null && raw.trim().startsWith("{")) {
                     JSONObject j = new JSONObject(raw);
-                    o.put("app", j.optString("app", ""));
-                    o.put("title", j.optString("title", ""));
-                    o.put("body", j.optString("body", j.optString("message", "")));
+                    // 字段兜底与 iOS 端 NotifyServer 对齐：body 缺失时依次取 message / text；
+                    // app 缺失时给"通知"，保证页面一定能归类显示（而不是静默丢弃）。
+                    String app = j.optString("app", "");
+                    String title = j.optString("title", "");
+                    String body = firstNonEmpty(
+                            j.optString("body", ""),
+                            j.optString("message", ""),
+                            j.optString("text", ""));
+                    if (app.length() == 0) app = "通知";
+                    o.put("app", app);
+                    o.put("title", title);
+                    o.put("body", body);
                     o.put("ts", fixTs(j.optLong("ts", 0)));
                 } else if (raw != null && raw.indexOf('=') >= 0) {
                     fillFromQuery(o, raw);
@@ -295,7 +304,7 @@ public class ServerService extends Service {
                         o.put("body", str(parms.get("body")));
                         o.put("ts", fixTs(num(parms.get("ts"))));
                     } else {
-                        o.put("app", "");
+                        o.put("app", "通知");
                         o.put("title", "");
                         o.put("body", raw == null ? "" : raw);
                         o.put("ts", fixTs(0));
@@ -352,6 +361,14 @@ public class ServerService extends Service {
             } catch (Exception e) {
                 return 0;
             }
+        }
+
+        /** 返回第一个非空字符串（全空则返回空串） */
+        private String firstNonEmpty(String... vals) {
+            for (String v : vals) {
+                if (v != null && v.length() > 0) return v;
+            }
+            return "";
         }
 
         private long fixTs(long ts) {
