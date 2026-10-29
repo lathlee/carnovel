@@ -263,6 +263,20 @@ public class ServerService extends Service {
         }
 
         private Response handlePush(IHTTPSession session) {
+            // NanoHTTPD 2.3.1 对没有 charset 的 Content-Type 默认按 US-ASCII 解码 body，
+            // 中文会变成不可逆的 U+FFFD 乱码。parseBody 读的是 getHeaders() 返回的同一个
+            // map，所以在解析之前把 charset 强制补成 UTF-8，中文就安全了。
+            try {
+                Map<String, String> hs = session.getHeaders();
+                String ct = hs.get("content-type");
+                if (ct == null || ct.length() == 0) {
+                    hs.put("content-type", "application/json; charset=UTF-8");
+                } else if (ct.toLowerCase().indexOf("charset") < 0) {
+                    hs.put("content-type", ct + "; charset=UTF-8");
+                }
+            } catch (Exception ignored) {
+            }
+
             JSONObject o = new JSONObject();
             String raw = null;
             try {

@@ -52,16 +52,16 @@ jobs:
         run: |
           set -e
           mkdir -p out
-          cp android/app/build/outputs/apk/debug/app-debug.apk out/CarNotifyServer-1.1-debug.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk out/CarNotifyServer-1.2-debug.apk
           ls -l out
           echo "=== badging ==="
-          "$ANDROID_HOME"/build-tools/34.0.0/aapt dump badging out/CarNotifyServer-1.1-debug.apk | head -8 || true
+          "$ANDROID_HOME"/build-tools/34.0.0/aapt dump badging out/CarNotifyServer-1.2-debug.apk | head -8 || true
 
       - name: 上传 artifact（备份）
         uses: actions/upload-artifact@v4
         with:
           name: CarNotifyServer-apk
-          path: out/CarNotifyServer-1.1-debug.apk
+          path: out/CarNotifyServer-1.2-debug.apk
 
       - name: 推到 android-build 分支
         run: |
@@ -71,7 +71,7 @@ jobs:
           git checkout -B android-build
           git rm -rf . --quiet || true
           mkdir -p apk
-          cp out/CarNotifyServer-1.1-debug.apk apk/
+          cp out/CarNotifyServer-1.2-debug.apk apk/
           printf "commit=%s\ntime=%s\n" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > apk/BUILD.txt
           cat apk/BUILD.txt
           git add apk
