@@ -472,6 +472,10 @@ final class NotifyServer: ObservableObject {
             publishClientCount()
             // 连上就立刻要一次电量，不用等眼镜的下一个 30s 周期
             sendFrame(key: key, text: jsonString(["type": "get_battery"]))
+            // 告诉眼镜「遥控端（iPhone 本机）已就位」→ 眼镜据此显示三角光标。
+            // 眼镜端 v1.9+ 只在收到 {"type":"peer","connected":true} 时才显示光标，
+            // 否则连上后光标不出现、远程也就点不到东西。
+            sendFrame(key: key, text: jsonString(["type": "peer", "connected": true]))
 
         case "battery":
             // 眼镜电量上报：{"type":"battery","level":87,"charging":false}
