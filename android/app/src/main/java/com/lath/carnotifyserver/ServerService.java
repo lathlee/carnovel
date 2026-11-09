@@ -5,7 +5,9 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
+import android.media.AudioFormat;
 import android.media.AudioManager;
+import android.media.AudioTrack;
 import android.media.ToneGenerator;
 import android.os.Build;
 import android.os.IBinder;
@@ -36,7 +38,7 @@ import fi.iki.elonen.NanoHTTPD;
  *  - POST /push   接收 iPhone 快捷指令推送，存下来并在车机本地响一声
  *  - GET  /latest 给页面轮询（返回最新消息，新的在前）
  *  - POST /clear  清屏
- *  - GET  /       返回内置页面（APTV 浏览器打开）
+ *  - GET  /       返回内置页面（CARTV 浏览器打开）
  *
  * 保活：前台服务 + 开机自启 + AlarmManager 看门狗（见 WatchdogReceiver）
  */
@@ -50,7 +52,6 @@ public class ServerService extends Service {
     static ServerService instance = null;
 
     private HttpServer server;
-    private ToneGenerator tone;
     private final List<JSONObject> msgs = new ArrayList<JSONObject>();
     private long nextId = 1;
     private File store;
@@ -84,10 +85,6 @@ public class ServerService extends Service {
         instance = null;
         try {
             if (server != null) server.stop();
-        } catch (Exception ignored) {
-        }
-        try {
-            if (tone != null) tone.release();
         } catch (Exception ignored) {
         }
         super.onDestroy();
@@ -183,16 +180,73 @@ public class ServerService extends Service {
 
     // ---------------- 提示音 ----------------
 
+    /**
+     * 短促清脆的「叮」：880Hz 基频 + 轻泛音，3ms 淡入、指数衰减、结尾归零，
+     * 全长 140ms。比系统 TONE_PROP_BEEP 柔和不刺耳；直接用 AudioTrack 合成 PCM，
+     * 不依赖车机自带提示音，各设备听感一致。发声放异步线程，不阻塞 HTTP 处理。
+     */
     void beep() {
-        try {
-            if (tone == null) tone = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, 95);
-            tone.startTone(ToneGenerator.TONE_PROP_BEEP, 180);
-        } catch (Exception e) {
-            try {
-                tone = new ToneGenerator(AudioManager.STREAM_MUSIC, 95);
-                tone.startTone(ToneGenerator.TONE_PROP_BEEP, 180);
-            } catch (Exception ignored) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                if (!playChime(AudioManager.STREAM_NOTIFICATION)
+                        && !playChime(AudioManager.STREAM_MUSIC)) {
+                    fallbackTone();
+                }
             }
+        }, "carnotify-beep").start();
+    }
+
+    private boolean playChime(int stream) {
+        AudioTrack at = null;
+        try {
+            final int rate = 44100;
+            final int durMs = 140;
+            final int n = rate * durMs / 1000;
+            short[] pcm = new short[n];
+            for (int i = 0; i < n; i++) {
+                double t = (double) i / rate;
+                double attack = Math.min(1.0, t / 0.003);
+                double tail = Math.max(0.0, 1.0 - t * 1000.0 / durMs);
+                double env = attack * Math.exp(-t * 18.0) * tail;
+                double v = (0.60 * Math.sin(2 * Math.PI * 880 * t)
+                        + 0.25 * Math.sin(2 * Math.PI * 1760 * t)
+                        + 0.08 * Math.sin(2 * Math.PI * 2640 * t)) * env * 0.45;
+                pcm[i] = (short) (v * Short.MAX_VALUE);
+            }
+            at = new AudioTrack(stream, rate, AudioFormat.CHANNEL_OUT_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT, pcm.length * 2, AudioTrack.MODE_STATIC);
+            if (at.getState() != AudioTrack.STATE_INITIALIZED) {
+                at.release();
+                return false;
+            }
+            at.write(pcm, 0, pcm.length);
+            at.play();
+            try {
+                Thread.sleep(durMs + 60L);
+            } catch (InterruptedException ignored) {
+            }
+            at.release();
+            return true;
+        } catch (Exception e) {
+            if (at != null) {
+                try {
+                    at.release();
+                } catch (Exception ignored) {
+                }
+            }
+            return false;
+        }
+    }
+
+    /** AudioTrack 不可用时的兜底：纯净短促的 DTMF 单音，音量压低 */
+    private void fallbackTone() {
+        try {
+            ToneGenerator tg = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, 60);
+            tg.startTone(ToneGenerator.TONE_DTMF_1, 100);
+            Thread.sleep(160);
+            tg.release();
+        } catch (Exception ignored) {
         }
     }
 
