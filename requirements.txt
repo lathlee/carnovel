@@ -1,3 +1,0 @@
-# Python 版流水线的依赖（仅 Windows 端验证用，与 App 无关）
-pillow>=10.0
-imageio-ffmpeg>=0.4.9
