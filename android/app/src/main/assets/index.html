@@ -4,29 +4,37 @@
 <style>
 :root{--fs:16px}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font:16px/1.4 ui-monospace,Menlo,-apple-system,"PingFang SC",monospace;background:#070b07;color:#ffffff;padding:10px;height:100vh;overflow:hidden;touch-action:manipulation;-webkit-text-size-adjust:100%}
+body{font:16px/1.4 ui-monospace,Menlo,-apple-system,"PingFang SC",monospace;background:#070b07;color:#ffffff;
+  padding:10px 10px calc(var(--fs)*3.4 + 14px);height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;touch-action:manipulation;-webkit-text-size-adjust:100%}
 /* 顶部：只保留左上角连接状态点 */
-.top{display:flex;align-items:center;justify-content:space-between;min-height:30px;margin-bottom:2px}
+.top{display:flex;align-items:center;justify-content:space-between;min-height:30px;margin-bottom:2px;flex:none}
 .dot{width:8px;height:8px;border-radius:50%;background:#444;flex:none}
 .dot.on{background:#3fb950}
 /* 顶部时钟：有消息时上移靠顶；无消息时放大并四向居中；两者间 0.5s 过渡（缩小+上移），清屏时反向 */
-.clockbar{display:flex;align-items:center;justify-content:center;margin:0 0 2px;padding:2px 0;
+.clockbar{display:flex;align-items:center;justify-content:center;margin:0 0 2px;padding:2px 0;flex:none;
   min-height:calc(var(--fs)*2.8);transition:min-height .5s ease,margin .5s ease}
 .clock{color:#ffffff;
   font-family:ui-rounded,"SF Pro Rounded",-apple-system,"Hiragino Sans","PingFang SC",sans-serif;
   font-weight:800;font-size:calc(var(--fs)*3);line-height:1.05;letter-spacing:4px;transition:font-size .5s ease}
+/* 空状态没有消息，底部用回默认内边距，保持大时钟原来的居中位置 */
+body.empty{padding-bottom:10px}
 body.empty .clockbar{min-height:calc(var(--fs)*20);margin:0}
 body.empty .clock{font-size:calc(var(--fs)*9)}
 /* 两列标识：高度减半、绿框黑底绿字 / 蓝框黑底蓝字、括号内消息条数；无消息的列隐藏 */
-.cols-head{display:flex;gap:10px;margin:2px 0 8px}
+.cols-head{display:flex;gap:10px;margin:2px 0 8px;flex:none}
 .tag{flex:1;text-align:center;font-size:calc(var(--fs)*0.72);font-weight:700;
   padding:3px 6px;border-radius:6px;letter-spacing:2px;line-height:1.1}
 .tag.wx{color:#3fb950;background:#000;border:2px solid #3fb950}
 .tag.sms{color:#388bfd;background:#000;border:2px solid #388bfd}
 .tag .cnt{font-weight:600;opacity:.9}
 .tag.hide{display:none}
-/* 左右两列：无消息的列整体隐藏 → 另一列 flex:1 占满整行。底部留白避免卡片被悬浮条压住 */
-.cols{display:flex;gap:10px;align-items:flex-start;padding-bottom:calc(var(--fs)*3.6)}
+/* 左右两列：无消息的列整体隐藏 → 另一列 flex:1 占满整行。
+   消息区独立占满剩余高度并可纵向滚动，时钟/标识/底部按钮保持不动 */
+.cols{display:flex;gap:10px;align-items:flex-start;
+  flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding-bottom:6px;touch-action:pan-y}
+.cols::-webkit-scrollbar{width:0;height:0}
 .col{flex:1;min-width:0}
 .col.hide{display:none}
 /* 消息卡片：高度收小 1/3、行距紧凑、上下间距收小 2/3、边框加粗、时间置右下角 */
@@ -128,16 +136,22 @@ function draw(animate){
     });
   }
 }
-// 把服务器返回的最新消息灌入列表；仅“实时新增”的那条播放动画
+// 把服务器返回的最新消息灌入列表；仅“实时新增”的那条播放动画。
+// 关键：轮询 0.8s 一次，内容没变就绝不重绘，否则会不断打断用户上下滑动。
+var lastSig="";
 function ingest(items){
-  var hasNew=false,arr=[];
+  var arr=[];
   for(var i=0;i<items.length;i++){
     var m=items[i]||{},seq=m.id;
-    if(!seen[seq])hasNew=true;
     arr.push({seq:seq,app:m.app,title:m.title,body:m.body,ts:m.ts});
   }
   arr.sort(function(a,b){return (b.seq||0)-(a.seq||0);});
+  var sig=arr.length?(arr[0].seq+"_"+arr.length):"0";
+  if(sig===lastSig)return;
+  var hasNew=false;
+  for(var j=0;j<arr.length;j++){if(!seen[arr[j].seq]){hasNew=true;break;}}
   plain=arr;
+  lastSig=sig;
   draw(hasNew && !firstLoad);
   firstLoad=false;
 }
@@ -163,7 +177,7 @@ function poll(){
   try{x.send();}catch(e){again();}
 }
 function clearAll(){
-  plain=[];draw(false);
+  plain=[];lastSig="";draw(false);
   try{var x=new XMLHttpRequest();x.open("POST","/clear",true);x.send();}catch(e){}
 }
 // 底部悬浮三按钮：字号 - / 清屏 / 字号 +
